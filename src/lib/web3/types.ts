@@ -1,5 +1,6 @@
 export interface Milestone {
-  description: string;
+  description: string;   // freelancer submission response (original requirements before first submission)
+  requirements?: string; // original client requirements — populated once contract v2 is live
   amount: string;
   status:
     | "pending"
@@ -14,7 +15,10 @@ export interface Milestone {
   disputeReason?: string;
   resolvedAt?: number;
   resolvedBy?: string;
-  resolutionAmount?: string; // Amount paid to beneficiary in resolution (0 = client wins, >0 = freelancer wins)
+  resolutionAmount?: string; // kept for compat — same as resolutionFreelancerAmount
+  resolutionFreelancerAmount?: string;
+  resolutionClientAmount?: string;
+  resolutionReason?: string;
 }
 
 export interface Escrow {

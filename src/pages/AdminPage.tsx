@@ -76,6 +76,7 @@ export default function AdminPage() {
   const [tokenToWhitelist, setTokenToWhitelist] = useState("");
   const [whitelistedTokenList, setWhitelistedTokenList] = useState<string[]>([]);
   const [isWhitelisting, setIsWhitelisting] = useState(false);
+  const [delistingToken, setDelistingToken] = useState<string | null>(null);
 
   // Platform fee state
   const [currentFeeBP, setCurrentFeeBP] = useState<number | null>(null);
@@ -209,6 +210,26 @@ export default function AdminPage() {
       }
     } finally {
       setIsWhitelisting(false);
+    }
+  };
+
+  const handleDelistToken = async (token: string) => {
+    setDelistingToken(token);
+    try {
+      await contractService.delistToken(token);
+      toast({
+        title: "Token Delisted",
+        description: `${short(token, 20, 14)} has been removed from the whitelist.`,
+      });
+      await fetchContractStats();
+    } catch (error: any) {
+      toast({
+        title: "Delist Failed",
+        description: error?.message || "Transaction failed.",
+        variant: "destructive",
+      });
+    } finally {
+      setDelistingToken(null);
     }
   };
 
@@ -515,15 +536,27 @@ export default function AdminPage() {
                       </div>
                       <div className="space-y-1">
                         {whitelistedTokenList.slice(0, 5).map((t) => (
-                          <button
-                            key={t}
-                            type="button"
-                            onClick={() => void copy(t, "Token address")}
-                            className="w-full text-left text-xs font-mono bg-muted p-2 rounded break-all hover:bg-muted/80 transition-colors"
-                            title="Click to copy"
-                          >
-                            {short(t, 20, 14)}
-                          </button>
+                          <div key={t} className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => void copy(t, "Token address")}
+                              className="flex-1 text-left text-xs font-mono bg-muted p-2 rounded hover:bg-muted/80 transition-colors truncate"
+                              title="Click to copy"
+                            >
+                              {short(t, 20, 14)}
+                            </button>
+                            <button
+                              type="button"
+                              title="Delist token"
+                              disabled={delistingToken === t}
+                              onClick={() => void handleDelistToken(t)}
+                              className="shrink-0 p-1.5 rounded text-destructive hover:bg-destructive/10 disabled:opacity-50 transition-colors"
+                            >
+                              {delistingToken === t
+                                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                : <Trash2 className="h-3.5 w-3.5" />}
+                            </button>
+                          </div>
                         ))}
                       </div>
                     </div>

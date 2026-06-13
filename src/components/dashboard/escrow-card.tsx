@@ -242,27 +242,60 @@ export function EscrowCard({
                       className="flex flex-col gap-3 p-3 bg-muted/20 rounded-lg border border-muted"
                     >
                       {/* Milestone header */}
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex-1 min-w-0">
-                          {(() => {
-                            const { body, attachment } = parseAttachment(milestone.description ?? "");
-                            const hasSubmissionResponse =
-                              (milestone as any).originalDescription &&
-                              milestone.description &&
-                              milestone.description !== (milestone as any).originalDescription &&
-                              milestone.status !== "pending";
-                            const requirements = (milestone as any).originalDescription || body;
-                            return (
-                              <>
-                                <p className="text-xs text-muted-foreground font-medium">Requirements:</p>
-                                <p className="text-sm font-medium whitespace-pre-wrap wrap-break-word">{requirements}</p>
-                                {hasSubmissionResponse && (
-                                  <div className="mt-2 p-2 bg-blue-50 dark:bg-blue-900/20 rounded border border-blue-200 dark:border-blue-800">
-                                    <p className="text-xs font-medium text-blue-700 dark:text-blue-300">Submission Response:</p>
-                                    <p className="text-sm text-blue-800 dark:text-blue-200 whitespace-pre-wrap wrap-break-word mt-1">{body}</p>
+                      {(() => {
+                        const { body: rawBody, attachment } = parseAttachment(milestone.description ?? "");
+                        // `requirements` comes directly from the contract (new field, never overwritten)
+                        const contractReq = (milestone as any).requirements as string | undefined;
+                        let requirements: string = contractReq ?? "";
+                        let submissionResponse: string | null = null;
+                        let submissionAttachment: { url: string; name: string } | null = null;
+
+                        if (["submitted", "approved", "disputed", "resolved", "rejected"].includes(milestone.status)) {
+                          // description is the freelancer's submission response
+                          submissionResponse = rawBody;
+                          submissionAttachment = attachment;
+                        } else {
+                          // still pending — description IS the requirements (no submission yet)
+                          if (!requirements) requirements = rawBody;
+                        }
+
+                        return (
+                          <>
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex-1 min-w-0 space-y-2">
+                                {/* Original requirements */}
+                                {requirements ? (
+                                  <div>
+                                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-0.5">Requirements</p>
+                                    <p className="text-sm whitespace-pre-wrap wrap-break-word leading-relaxed">{requirements}</p>
+                                  </div>
+                                ) : null}
+
+                                {/* Freelancer submission response */}
+                                {submissionResponse !== null && (
+                                  <div className="p-2.5 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg border border-emerald-200 dark:border-emerald-800">
+                                    <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400 mb-1">
+                                      Freelancer's Submission
+                                    </p>
+                                    <p className="text-sm text-emerald-900 dark:text-emerald-100 whitespace-pre-wrap wrap-break-word leading-relaxed">
+                                      {submissionResponse || <span className="italic text-emerald-600/60">No description provided</span>}
+                                    </p>
+                                    {submissionAttachment && (
+                                      <a
+                                        href={submissionAttachment.url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center gap-1 mt-1.5 text-xs text-emerald-700 dark:text-emerald-400 hover:underline"
+                                      >
+                                        <Paperclip className="h-3 w-3 shrink-0" />
+                                        {submissionAttachment.name}
+                                      </a>
+                                    )}
                                   </div>
                                 )}
-                                {attachment && (
+
+                                {/* Attachment for requirements (when no separate submission) */}
+                                {submissionResponse === null && attachment && (
                                   <a
                                     href={attachment.url}
                                     target="_blank"
@@ -273,17 +306,49 @@ export function EscrowCard({
                                     {attachment.name}
                                   </a>
                                 )}
-                              </>
-                            );
-                          })()}
-                          <p className="text-xs text-muted-foreground mt-1">{fmtXlm(milestone.amount)}</p>
-                        </div>
-                        <Badge className={getMilestoneStatusColor(milestone.status)}>
-                          {milestone.status}
-                        </Badge>
-                      </div>
 
-                      {/* Milestone actions (approve / reject / dispute) */}
+                                <p className="text-xs text-muted-foreground pt-0.5">{fmtXlm(milestone.amount)}</p>
+                              </div>
+                              <Badge className={getMilestoneStatusColor(milestone.status)}>
+                                {milestone.status}
+                              </Badge>
+                            </div>
+                          </>
+                        );
+                      })()}
+
+                      {/* Dispute resolution outcome — visible to both parties */}
+                      {milestone.status === "resolved" && (() => {
+                        const freelancerAmt = Number((milestone as any).resolutionFreelancerAmount || milestone.resolutionAmount || "0");
+                        const clientAmt = Number((milestone as any).resolutionClientAmount || "0");
+                        const reason = (milestone as any).resolutionReason as string | undefined;
+                        return (
+                          <div className="mt-2 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800 space-y-2">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-300">Dispute Resolved</p>
+                            {(freelancerAmt > 0 || clientAmt > 0) && (
+                              <div className="grid grid-cols-2 gap-2">
+                                <div className="p-2 rounded bg-green-100 dark:bg-green-900/30 text-center">
+                                  <p className="text-xs text-green-700 dark:text-green-400 font-medium">Freelancer received</p>
+                                  <p className="text-sm font-bold text-green-800 dark:text-green-300">{(freelancerAmt / 1e7).toFixed(2)} XLM</p>
+                                </div>
+                                <div className="p-2 rounded bg-orange-100 dark:bg-orange-900/30 text-center">
+                                  <p className="text-xs text-orange-700 dark:text-orange-400 font-medium">You were refunded</p>
+                                  <p className="text-sm font-bold text-orange-800 dark:text-orange-300">{(clientAmt / 1e7).toFixed(2)} XLM</p>
+                                </div>
+                              </div>
+                            )}
+                            {reason && (
+                              <div className="p-2 rounded bg-blue-100 dark:bg-blue-800/30 border border-blue-200 dark:border-blue-700">
+                                <p className="text-xs font-medium text-blue-800 dark:text-blue-200 mb-0.5">Arbiter's reasoning:</p>
+                                <p className="text-sm text-blue-700 dark:text-blue-300">{reason}</p>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
+
+                      {/* Milestone actions (approve / reject / dispute) — centered */}
+                      <div className="flex justify-center">
                       <MilestoneActions
                         escrowId={escrow.id}
                         milestoneIndex={idx}
@@ -302,6 +367,7 @@ export function EscrowCard({
                           await new Promise((resolve) => setTimeout(resolve, 2000));
                         }}
                       />
+                      </div>
 
                       {/* Evidence buttons for disputed milestones */}
                       {milestone.status === "disputed" && (

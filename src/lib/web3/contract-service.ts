@@ -682,6 +682,7 @@ export class ContractService {
           if (Array.isArray(result)) {
             return result.map((m: any) => ({
               description: m.description || m[0] || "",
+              requirements: m.requirements || "",
               amount: m.amount || m[1] || "0",
               status: m.status || m[2] || 0,
               submitted_at: m.submitted_at || m[3] || 0,
@@ -690,9 +691,11 @@ export class ContractService {
               disputed_by: m.disputed_by || m[6] || undefined,
               dispute_reason: m.dispute_reason || m[7] || undefined,
               rejection_reason: m.rejection_reason || m[8] || undefined,
-              resolved_at: m.resolved_at || m[9] || 0,
-              resolved_by: m.resolved_by || m[10] || undefined,
-              resolution_amount: m.resolution_amount || m[11] || undefined,
+              resolved_at: m.resolved_at || 0,
+              resolved_by: m.resolved_by || undefined,
+              resolution_freelancer_amount: m.resolution_freelancer_amount?.toString() || "0",
+              resolution_client_amount: m.resolution_client_amount?.toString() || "0",
+              resolution_reason: m.resolution_reason || undefined,
             }));
           }
         } catch (e) {
@@ -3551,260 +3554,14 @@ export class ContractService {
    */
   async pauseJobCreation(address?: string): Promise<string> {
     const walletAddress = address || useWalletStore.getState().address;
-    if (!walletAddress) {
-      throw new Error("Wallet not connected");
-    }
-
-    try {
-      const contract = new Contract(this.contractId);
-      const sourceAccount = await this.rpcServer.getAccount(walletAddress);
-
-      // Use pause_job_creation() - no parameters needed
-      const tx = new TransactionBuilder(sourceAccount, {
-        fee: "100",
-        networkPassphrase: this.network.networkPassphrase,
-      })
-        .addOperation(contract.call("pause_job_creation"))
-        .setTimeout(30)
-        .build();
-
-      // Simulate to check for errors and get auth entries
-      const simulation = await this.rpcServer.simulateTransaction(tx);
-
-      // Check for auth entries
-      const authEntries =
-        "auth" in simulation && simulation.auth
-          ? Array.isArray(simulation.auth)
-            ? simulation.auth
-            : []
-          : [];
-
-      // Check if simulation failed
-      if ("errorResult" in simulation && simulation.errorResult) {
-        const errorValue =
-          (simulation.errorResult as any).value?.() || simulation.errorResult;
-        throw new Error(
-          `Transaction simulation failed: ${errorValue.toString()}`
-        );
-      }
-
-      // Prepare transaction
-      const prepared = await this.rpcServer.prepareTransaction(tx);
-
-      // Sign auth entries if needed
-      if (Array.isArray(authEntries) && authEntries.length > 0) {
-        const signedAuthEntries = await signAuthEntries(
-          authEntries as any[],
-          walletAddress
-        );
-        // Rebuild transaction with signed auth entries
-        const { xdr } = await import("@stellar/stellar-sdk");
-        const parsedSignedAuth = signedAuthEntries.map((signed: string) =>
-          xdr.SorobanAuthorizationEntry.fromXDR(signed, "base64")
-        );
-
-        const operations = prepared.operations;
-        if (operations && operations.length > 0) {
-          const op = operations[0];
-          if (op.type === "invokeHostFunction") {
-            const invokeOp = op as any;
-            const hostFn = invokeOp.function || invokeOp.hostFunction;
-            const newOp = Operation.invokeHostFunction({
-              function: hostFn as xdr.HostFunction,
-              auth: parsedSignedAuth,
-            } as any);
-
-            const freshAccount = await this.rpcServer.getAccount(walletAddress);
-            const newTx = new TransactionBuilder(freshAccount, {
-              fee: prepared.fee,
-              networkPassphrase: this.network.networkPassphrase,
-            })
-              .addOperation(newOp)
-              .setTimeout(30)
-              .build();
-
-            const newPrepared = await this.rpcServer.prepareTransaction(newTx);
-            const signedTxXdr = await signTransaction({
-              unsignedTransaction: newPrepared.toXDR(),
-              address: walletAddress,
-            });
-
-            const signedTransaction = TransactionBuilder.fromXDR(
-              signedTxXdr,
-              this.network.networkPassphrase
-            );
-
-            const sendResponse =
-              await this.rpcServer.sendTransaction(signedTransaction);
-
-            if (sendResponse.status === "ERROR") {
-              throw new Error("Transaction failed");
-            }
-
-            if (sendResponse.status === "PENDING" && sendResponse.hash) {
-              return await this.waitForConfirmation(sendResponse.hash);
-            }
-
-            return sendResponse.hash || "";
-          }
-        }
-      }
-
-      // No auth entries, sign normally
-      const signedTxXdr = await signTransaction({
-        unsignedTransaction: prepared.toXDR(),
-        address: walletAddress,
-      });
-
-      const signedTransaction = TransactionBuilder.fromXDR(
-        signedTxXdr,
-        this.network.networkPassphrase
-      );
-
-      const sendResponse =
-        await this.rpcServer.sendTransaction(signedTransaction);
-
-      if (sendResponse.status === "ERROR") {
-        throw new Error("Transaction failed");
-      }
-
-      if (sendResponse.status === "PENDING" && sendResponse.hash) {
-        return await this.waitForConfirmation(sendResponse.hash);
-      }
-
-      return sendResponse.hash || "";
-    } catch (error: any) {
-      throw error;
-    }
+    if (!walletAddress) throw new Error("Wallet not connected");
+    return this.sendOwnerTransaction("pause_job_creation", [], walletAddress);
   }
 
   async unpauseJobCreation(address?: string): Promise<string> {
     const walletAddress = address || useWalletStore.getState().address;
-    if (!walletAddress) {
-      throw new Error("Wallet not connected");
-    }
-
-    try {
-      const contract = new Contract(this.contractId);
-      const sourceAccount = await this.rpcServer.getAccount(walletAddress);
-
-      // Use unpause_job_creation() - no parameters needed
-      const tx = new TransactionBuilder(sourceAccount, {
-        fee: "100",
-        networkPassphrase: this.network.networkPassphrase,
-      })
-        .addOperation(contract.call("unpause_job_creation"))
-        .setTimeout(30)
-        .build();
-
-      // Simulate to check for errors and get auth entries
-      const simulation = await this.rpcServer.simulateTransaction(tx);
-
-      // Check for auth entries
-      const authEntries =
-        "auth" in simulation && simulation.auth
-          ? Array.isArray(simulation.auth)
-            ? simulation.auth
-            : []
-          : [];
-
-      // Check if simulation failed
-      if ("errorResult" in simulation && simulation.errorResult) {
-        const errorValue =
-          (simulation.errorResult as any).value?.() || simulation.errorResult;
-        throw new Error(
-          `Transaction simulation failed: ${errorValue.toString()}`
-        );
-      }
-
-      // Prepare transaction
-      const prepared = await this.rpcServer.prepareTransaction(tx);
-
-      // Sign auth entries if needed
-      if (Array.isArray(authEntries) && authEntries.length > 0) {
-        const signedAuthEntries = await signAuthEntries(
-          authEntries as any[],
-          walletAddress
-        );
-        // Rebuild transaction with signed auth entries
-        const { xdr } = await import("@stellar/stellar-sdk");
-        const parsedSignedAuth = signedAuthEntries.map((signed: string) =>
-          xdr.SorobanAuthorizationEntry.fromXDR(signed, "base64")
-        );
-
-        const operations = prepared.operations;
-        if (operations && operations.length > 0) {
-          const op = operations[0];
-          if (op.type === "invokeHostFunction") {
-            const invokeOp = op as any;
-            const hostFn = invokeOp.function || invokeOp.hostFunction;
-            const newOp = Operation.invokeHostFunction({
-              function: hostFn as xdr.HostFunction,
-              auth: parsedSignedAuth,
-            } as any);
-
-            const freshAccount = await this.rpcServer.getAccount(walletAddress);
-            const newTx = new TransactionBuilder(freshAccount, {
-              fee: prepared.fee,
-              networkPassphrase: this.network.networkPassphrase,
-            })
-              .addOperation(newOp)
-              .setTimeout(30)
-              .build();
-
-            const newPrepared = await this.rpcServer.prepareTransaction(newTx);
-            const signedTxXdr = await signTransaction({
-              unsignedTransaction: newPrepared.toXDR(),
-              address: walletAddress,
-            });
-
-            const signedTransaction = TransactionBuilder.fromXDR(
-              signedTxXdr,
-              this.network.networkPassphrase
-            );
-
-            const sendResponse =
-              await this.rpcServer.sendTransaction(signedTransaction);
-
-            if (sendResponse.status === "ERROR") {
-              throw new Error("Transaction failed");
-            }
-
-            if (sendResponse.status === "PENDING" && sendResponse.hash) {
-              return await this.waitForConfirmation(sendResponse.hash);
-            }
-
-            return sendResponse.hash || "";
-          }
-        }
-      }
-
-      // No auth entries, sign normally
-      const signedTxXdr = await signTransaction({
-        unsignedTransaction: prepared.toXDR(),
-        address: walletAddress,
-      });
-
-      const signedTransaction = TransactionBuilder.fromXDR(
-        signedTxXdr,
-        this.network.networkPassphrase
-      );
-
-      const sendResponse =
-        await this.rpcServer.sendTransaction(signedTransaction);
-
-      if (sendResponse.status === "ERROR") {
-        throw new Error("Transaction failed");
-      }
-
-      if (sendResponse.status === "PENDING" && sendResponse.hash) {
-        return await this.waitForConfirmation(sendResponse.hash);
-      }
-
-      return sendResponse.hash || "";
-    } catch (error: any) {
-      throw error;
-    }
+    if (!walletAddress) throw new Error("Wallet not connected");
+    return this.sendOwnerTransaction("unpause_job_creation", [], walletAddress);
   }
 
   async setPlatformFeeBP(feeBP: number): Promise<string> {
@@ -3862,6 +3619,16 @@ export class ContractService {
     if (!address) throw new Error("Wallet not connected");
     return this.sendOwnerTransaction(
       "whitelist_token",
+      [nativeToScVal(token, { type: "address" })],
+      address,
+    );
+  }
+
+  async delistToken(token: string): Promise<string> {
+    const { address } = useWalletStore.getState();
+    if (!address) throw new Error("Wallet not connected");
+    return this.sendOwnerTransaction(
+      "delist_token",
       [nativeToScVal(token, { type: "address" })],
       address,
     );

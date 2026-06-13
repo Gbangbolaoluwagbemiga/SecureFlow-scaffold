@@ -34,11 +34,11 @@ export const signTransaction = async ({
     throw new Error("Wallet not connected");
   }
 
-  // Set wallet if not already set
   wallet.setWallet(walletId);
 
-  // Sign the transaction using the wallet utility
-  // The wallet utility has a signTransaction method that works with all wallets
+  // Wake up the wallet extension's service worker (fixes Chrome MV3 termination)
+  try { await wallet.getAddress(); } catch (_) { /* ignore */ }
+
   const signResult = await wallet.signTransaction(txXdr, {
     networkPassphrase: network.networkPassphrase,
     address,
@@ -67,6 +67,9 @@ export const signAuthEntries = async (
   const walletId = storage.getItem("walletId");
   if (!walletId) throw new Error("Wallet not connected");
   wallet.setWallet(walletId);
+
+  // Wake up the wallet extension's service worker (fixes Chrome MV3 termination)
+  try { await wallet.getAddress(); } catch (_) { /* ignore */ }
 
   const signedAuthEntries = await Promise.all(
     authEntries.map(async (entry: any) => {

@@ -126,6 +126,7 @@ pub fn create_escrow(
     for (i, (amount, description)) in milestone_amounts.iter().zip(milestone_descriptions.iter()).enumerate() {
         let milestone = crate::storage_types::Milestone {
             description: description.clone(),
+            requirements: description.clone(), // permanent copy of original requirements
             amount,
             status: crate::storage_types::MilestoneStatus::NotStarted,
             submitted_at: 0,
@@ -196,6 +197,7 @@ pub fn add_milestone(
 
     let new_index = escrow.milestone_count;
     let milestone = crate::storage_types::Milestone {
+        requirements: description.clone(),
         description,
         amount,
         status: crate::storage_types::MilestoneStatus::NotStarted,

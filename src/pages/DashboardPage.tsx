@@ -366,6 +366,7 @@ export default function DashboardPage() {
 
                   return {
                     description: m.description || "",
+                    requirements: m.requirements || "",
                     amount: m.amount?.toString() || "0",
                     status,
                     submittedAt,
@@ -374,19 +375,26 @@ export default function DashboardPage() {
                     rejectionReason: m.rejection_reason || undefined,
                     resolvedAt,
                     resolvedBy: m.resolved_by || undefined,
-                    resolutionAmount:
-                      m.resolution_amount?.toString() || undefined,
+                    resolutionAmount: m.resolution_freelancer_amount?.toString() || undefined,
+                    resolutionFreelancerAmount: m.resolution_freelancer_amount?.toString() || undefined,
+                    resolutionClientAmount: m.resolution_client_amount?.toString() || undefined,
+                    resolutionReason: m.resolution_reason || undefined,
                   };
                 } catch (error) {
                   // Return a safe default milestone object if parsing fails
                   return {
                     description: m.description || "",
+                    requirements: m.requirements || "",
                     amount: m.amount?.toString() || "0",
                     status: "pending" as const,
                     submittedAt: undefined,
                     approvedAt: undefined,
                     disputeReason: undefined,
                     rejectionReason: undefined,
+                    resolutionAmount: undefined,
+                    resolutionFreelancerAmount: undefined,
+                    resolutionClientAmount: undefined,
+                    resolutionReason: undefined,
                   };
                 }
               })
@@ -418,10 +426,8 @@ export default function DashboardPage() {
               duration: durationInSeconds,
               deadlineAt,
               milestones,
-              projectDescription:
-                escrowData.project_title ||
-                escrowData.project_description ||
-                "",
+              projectTitle: escrowData.project_title || "",
+              projectDescription: escrowData.project_description || "",
             };
 
             userEscrows.push(escrow);

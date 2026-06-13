@@ -136,7 +136,8 @@ pub enum MilestoneStatus {
 #[derive(Clone, Debug)]
 #[contracttype]
 pub struct Milestone {
-    pub description: String,
+    pub description: String,    // freelancer submission response (or original before any submission)
+    pub requirements: String,   // original client requirements — set at creation, never overwritten
     pub amount: i128,
     pub status: MilestoneStatus,
     pub submitted_at: u32,

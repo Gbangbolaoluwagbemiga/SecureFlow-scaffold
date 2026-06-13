@@ -220,6 +220,19 @@ impl SecureFlow {
         Ok(())
     }
 
+    /// Owner-only: remove a token from the whitelist so it can no longer be used for new escrows.
+    pub fn delist_token(env: Env, token: Address) -> Result<(), Error> {
+        admin::require_owner(&env)?;
+        env.storage()
+            .instance()
+            .extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
+        env.storage()
+            .instance()
+            .remove(&DataKey::WhitelistedToken(token.clone()));
+        admin::remove_from_list(&env, DataKey::WhitelistedTokens, &token);
+        Ok(())
+    }
+
     pub fn authorize_arbiter(env: Env, arbiter: Address) -> Result<(), Error> {
         admin::require_owner(&env)?;
         env.storage()
