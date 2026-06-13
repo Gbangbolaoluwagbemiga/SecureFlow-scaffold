@@ -1,3 +1,4 @@
+use crate::admin;
 use crate::escrow_core;
 use crate::storage_types::{DataKey, EscrowStatus, OverdueRequest, SecureFlowError, INSTANCE_BUMP_AMOUNT, INSTANCE_LIFETIME_THRESHOLD};
 use soroban_sdk::{token, Address, Env, Error, String};
@@ -6,6 +7,7 @@ const EMERGENCY_REFUND_DELAY: u32 = 2592000; // 30 days in seconds (legacy)
 
 pub fn refund_escrow(env: &Env, escrow_id: u32, depositor: Address) -> Result<(), Error> {
     depositor.require_auth();
+    admin::require_not_paused(env)?;
 
     escrow_core::require_valid_escrow(env, escrow_id)?;
     let mut escrow = escrow_core::get_escrow(env, escrow_id)
@@ -74,6 +76,7 @@ pub fn refund_escrow(env: &Env, escrow_id: u32, depositor: Address) -> Result<()
 
 pub fn emergency_refund_after_deadline(env: &Env, escrow_id: u32, depositor: Address) -> Result<(), Error> {
     depositor.require_auth();
+    admin::require_not_paused(env)?;
 
     escrow_core::require_valid_escrow(env, escrow_id)?;
     let mut escrow = escrow_core::get_escrow(env, escrow_id)

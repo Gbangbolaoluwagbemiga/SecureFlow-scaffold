@@ -56,7 +56,7 @@ export function DashboardStats({ escrows }: DashboardStatsProps) {
         </CardHeader>
         <CardContent>
           <div className="text-2xl font-bold">{totalValue.toFixed(2)}</div>
-          <p className="text-xs text-muted-foreground">tokens in escrows</p>
+          <p className="text-xs text-muted-foreground">XLM in escrows</p>
         </CardContent>
       </Card>
 
@@ -67,7 +67,7 @@ export function DashboardStats({ escrows }: DashboardStatsProps) {
         </CardHeader>
         <CardContent>
           <div className="text-2xl font-bold">{totalReleased.toFixed(2)}</div>
-          <p className="text-xs text-muted-foreground">tokens released</p>
+          <p className="text-xs text-muted-foreground">XLM released</p>
         </CardContent>
       </Card>
 

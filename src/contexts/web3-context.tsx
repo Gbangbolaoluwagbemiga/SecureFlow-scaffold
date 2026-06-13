@@ -95,30 +95,37 @@ export function Web3Provider({ children }: { children: ReactNode }) {
   useEffect(() => {
     checkConnection();
 
-    // Check connection periodically, but only if we have walletId in storage
-    // Don't repeatedly call wallet.getAddress() which opens popups
-    const interval = setInterval(() => {
+    // Periodically refresh balance from Horizon (avoids stale closure — reads from storage directly)
+    const interval = setInterval(async () => {
       const walletId = storage.getItem("walletId");
       const walletAddr = storage.getItem("walletAddress");
-
-      // Only check if we have walletId but no connection state
-      // If we already have address in storage, just update state without calling wallet
-      if (!walletState.isConnected && walletId && walletAddr) {
-        // Update state from storage without calling wallet methods
-        // Preserve existing balance - don't reset it
-        setWalletState((prev) => ({
-          address: walletAddr,
-          chainId: null,
-          isConnected: true,
-          balance: prev.balance || "0", // Keep existing balance
-        }));
-      } else if (!walletState.isConnected && walletId && !walletAddr) {
-        // Only call checkConnection if we have walletId but no cached address
-        // This prevents repeated popups
-        checkConnection();
+      if (!walletId || !walletAddr) return;
+      try {
+        const { Horizon } = await import("@stellar/stellar-sdk");
+        const horizonUrl = network.horizonUrl || "https://horizon-testnet.stellar.org";
+        const horizon = new Horizon.Server(horizonUrl);
+        const account = await horizon.accounts().accountId(walletAddr).call();
+        const nativeBalance = account.balances.find((b: any) => b.asset_type === "native");
+        if (nativeBalance) {
+          setWalletState((prev) => ({
+            ...prev,
+            address: walletAddr,
+            isConnected: true,
+            balance: parseFloat(nativeBalance.balance).toFixed(7),
+          }));
+        }
+      } catch {
+        // Network error — keep existing balance, ensure connection state is set
+        const walletAddr2 = storage.getItem("walletAddress");
+        if (walletAddr2) {
+          setWalletState((prev) => ({
+            ...prev,
+            address: walletAddr2,
+            isConnected: true,
+          }));
+        }
       }
-      // Don't call checkConnection if already connected - this prevents balance resets
-    }, 10000); // Increased interval to 10 seconds to reduce frequency
+    }, 30000); // Every 30 seconds
 
     return () => {
       clearInterval(interval);

@@ -18,6 +18,8 @@ import { useToast } from "@/hooks/use-toast";
 import { CONTRACTS } from "@/lib/web3/config";
 
 import { useNotifications } from "@/contexts/notification-context";
+import { DisputeEvidence } from "./dispute-evidence";
+import { AdminDisputeCommunication } from "./admin-dispute-communication";
 import {
   AlertTriangle,
   Clock,
@@ -491,6 +493,22 @@ export function DisputeResolution({
                   placeholder="Explain your decision..."
                 />
               </div>
+
+              {/* Evidence & Communication */}
+              <DisputeEvidence
+                escrowId={selectedDispute.escrowId}
+                milestoneIndex={selectedDispute.milestoneIndex}
+                clientAddress={selectedDispute.clientAddress}
+                freelancerAddress={selectedDispute.freelancerAddress}
+              />
+
+              <AdminDisputeCommunication
+                escrowId={selectedDispute.escrowId}
+                milestoneIndex={selectedDispute.milestoneIndex}
+                clientAddress={selectedDispute.clientAddress}
+                freelancerAddress={selectedDispute.freelancerAddress}
+                projectTitle={selectedDispute.projectTitle}
+              />
             </div>
           )}
 

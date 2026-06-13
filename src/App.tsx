@@ -3,6 +3,7 @@ import { Navbar } from "./components/navbar";
 import { Toaster } from "./components/ui/toaster";
 import { NewMessageWatcher } from "./components/new-message-watcher";
 import { EscrowPoller } from "./components/escrow-poller";
+import { EventPoller } from "./components/event-poller";
 import HomePage from "./pages/HomePage";
 import JobsPage from "./pages/JobsPage";
 import CreatePage from "./pages/CreatePage";
@@ -14,6 +15,7 @@ import ApprovalsPage from "./pages/ApprovalsPage";
 import FreelancersPage from "./pages/FreelancersPage";
 import MessagesPage from "./pages/MessagesPage";
 import Debugger from "./pages/Debugger";
+import AnalyticsPage from "./pages/AnalyticsPage";
 
 const AppLayout = () => (
   <>
@@ -23,6 +25,7 @@ const AppLayout = () => (
     </div>
     <NewMessageWatcher />
     <EscrowPoller />
+    <EventPoller />
     <Toaster />
   </>
 );
@@ -41,6 +44,7 @@ function App() {
         <Route path="/disputes" element={<DisputesPage />} />
         <Route path="/approvals" element={<ApprovalsPage />} />
         <Route path="/messages" element={<MessagesPage />} />
+        <Route path="/analytics" element={<AnalyticsPage />} />
         <Route path="/debug" element={<Debugger />} />
         <Route path="/debug/:contractName" element={<Debugger />} />
       </Route>

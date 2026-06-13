@@ -72,6 +72,32 @@ pub enum SecureFlowError {
     OnlyDepositorCanRate = 1803,
     OnlyBeneficiaryCanRate = 1804,
     ClientRatingAlreadySubmitted = 1805,
+
+    // Evidence errors (1900-1999)
+    NotPartyToEscrow = 1900,
+    EvidenceCidEmpty = 1901,
+
+    // Pause errors (2000-2099)
+    ContractIsPaused = 2000,
+
+    // Blacklist errors (2100-2199)
+    TokenIsBlacklisted = 2100,
+    AlreadyBlacklisted = 2101,
+
+    // Milestone management errors (2200-2299)
+    MilestoneAlreadyStarted = 2200,
+    MilestoneIndexOutOfBounds = 2201,
+    CannotModifyStartedEscrow = 2202,
+
+    // Job cancellation errors (2300-2399)
+    CannotCancelAssignedJob = 2300,
+
+    // Milestone negotiation errors (2400-2499)
+    NoPendingProposal = 2400,
+
+    // Escrow admin errors (2500-2599)
+    FundsStillLocked = 2500,
+    EscrowNotTerminal = 2501,
 }
 
 impl From<SecureFlowError> for Error {
@@ -90,6 +116,7 @@ pub enum EscrowStatus {
     Refunded,
     Disputed,
     Expired,
+    Cancelled, // open job cancelled by depositor before freelancer assigned
 }
 
 // Enum for Milestone Status
@@ -102,6 +129,7 @@ pub enum MilestoneStatus {
     Disputed,
     Resolved,
     Rejected,
+    ProposalPending, // freelancer proposed milestone change; awaiting client response
 }
 
 // Milestone struct
@@ -117,6 +145,15 @@ pub struct Milestone {
     pub disputed_by: Option<Address>,
     pub dispute_reason: Option<String>,
     pub rejection_reason: Option<String>,
+    // Dispute resolution fields
+    pub resolved_at: u32,
+    pub resolved_by: Option<Address>,
+    pub resolution_freelancer_amount: i128,
+    pub resolution_client_amount: i128,
+    pub resolution_reason: Option<String>,
+    // Milestone negotiation fields
+    pub proposed_amount: i128,
+    pub proposed_description: Option<String>,
 }
 
 // Application struct
@@ -194,6 +231,15 @@ pub struct OverdueRequest {
     pub requested_at: u32,
 }
 
+/// A single piece of evidence submitted by a party during a dispute.
+#[derive(Clone, Debug)]
+#[contracttype]
+pub struct EvidenceEntry {
+    pub submitter: Address,
+    pub cid: String,         // IPFS CID (or description if no IPFS)
+    pub submitted_at: u64,   // ledger timestamp
+}
+
 // Storage keys enum
 #[derive(Clone)]
 #[contracttype]
@@ -220,6 +266,16 @@ pub enum DataKey {
     FeeCollector,                   // -> Address
     Owner,                          // -> Address
     JobCreationPaused,              // -> bool
-    OverdueRequest(u32),            // escrow_id -> OverdueRequest (set when either party requests resolution)
+    ContractPaused,                 // -> bool  (full emergency pause)
+    OverdueRequest(u32),            // escrow_id -> OverdueRequest
+    Evidence(u32, u32),             // (escrow_id, milestone_index) -> Vec<EvidenceEntry>
+    BlacklistedToken(Address),      // token -> bool
+    BlacklistedTokens,              // -> Vec<Address>
+    // Dispute resolution voting
+    DisputeVote(u32, Address),      // (escrow_id, arbiter) -> bool  (has voted?)
+    DisputeVoteCount(u32),          // escrow_id -> u32  (total votes cast)
+    // Job cancellation anti-abuse
+    UserCancellations(Address),     // user -> u32  (lifetime cancellation count)
+    LastCancellationLedger(Address), // user -> u32  (ledger of last cancellation)
 }
 

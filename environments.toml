@@ -36,7 +36,7 @@ default = true
 
 [staging.contracts]
 # Stale example ID after testnet resets — replace with your deploy + initialize output.
-secureflow = { id = "CCHLR3D3MUM5PDRP6DQRREZK5QABLWGZP6PAIMQ4SEE64ZS2B6PNDRVC", client = true }
+secureflow = { id = "CBWMVACS6BVU55SQOSU2YLE6PL4J6COXJAWZZLTVFRE4E7UYOW4DX5KQ", client = true }
 
 ### Production environment configuration
 [production.network]

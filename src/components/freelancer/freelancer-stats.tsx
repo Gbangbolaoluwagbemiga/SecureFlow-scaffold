@@ -31,34 +31,35 @@ export function FreelancerStats({
 }: FreelancerStatsProps) {
   const totalEarnings = escrows.reduce(
     (sum, escrow) => sum + Number.parseFloat(escrow.releasedAmount),
-    0,
+    0
   );
 
   const totalValue = escrows.reduce(
     (sum, escrow) => sum + Number.parseFloat(escrow.totalAmount),
-    0,
+    0
   );
 
-  // Helper function to check if an escrow is terminated
+  // Escrow has/had issues: any disputed, rejected, or resolved-via-dispute milestone
   const isEscrowTerminated = (escrow: any) => {
     return escrow.milestones.some(
       (milestone: any) =>
-        milestone.status === "disputed" || milestone.status === "rejected",
+        milestone.status === "disputed" ||
+        milestone.status === "rejected" ||
+        milestone.status === "resolved"
     );
   };
 
+  // Completed = every milestone approved AND no disputes/rejections (mutually exclusive with Disputed)
   const completedProjects = escrows.filter((escrow) => {
-    // A project is completed if all milestones are approved
     if (escrow.milestones.length === 0) return false;
-    return escrow.milestones.every(
-      (milestone) => milestone.status === "approved",
+    return (
+      escrow.milestones.every((milestone: any) => milestone.status === "approved") &&
+      !isEscrowTerminated(escrow)
     );
   }).length;
 
-  // Count terminated projects (disputed/rejected milestones)
-  const terminatedProjects = escrows.filter((escrow) => {
-    return isEscrowTerminated(escrow);
-  }).length;
+  // Disputed = any milestone was/is disputed, rejected, or resolved via dispute
+  const terminatedProjects = escrows.filter((escrow) => isEscrowTerminated(escrow)).length;
 
   const badgeLabel = badge || "Beginner";
 
@@ -103,7 +104,7 @@ export function FreelancerStats({
 
       <Card className="glass border-destructive/20 p-4 md:p-6">
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Terminated</CardTitle>
+          <CardTitle className="text-sm font-medium">Disputed</CardTitle>
           <AlertTriangle className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>

@@ -11,12 +11,14 @@ interface JobsStatsProps {
   }>;
   openJobsCount?: number; // Total escrows from blockchain
   ongoingProjectsCount?: number;
+  isClientUser?: boolean; // Only show "Your Projects" card for users who have client escrows
 }
 
 export function JobsStats({
   jobs,
   openJobsCount,
   ongoingProjectsCount = 0,
+  isClientUser = false,
 }: JobsStatsProps) {
   const totalValue = jobs.reduce(
     (sum, job) => sum + Number.parseFloat(job.totalAmount),
@@ -56,7 +58,7 @@ export function JobsStats({
           <div className="min-w-0 flex-1">
             <p className="text-sm text-muted-foreground mb-1">Total Value</p>
             <p className="text-2xl md:text-3xl font-bold break-all">
-              {(totalValue / 1e7).toFixed(2)} tokens
+              {(totalValue / 1e7).toFixed(2)} XLM
             </p>
           </div>
           <DollarSign className="h-8 w-8 md:h-10 md:w-10 text-accent opacity-50 shrink-0" />
@@ -75,28 +77,30 @@ export function JobsStats({
         </div>
       </Card>
 
-      <Card
-        className={`glass p-4 md:p-6 ${ongoingProjectsCount >= 3 ? "border-red-200 dark:border-red-800" : "border-accent/20"}`}
-      >
-        <div className="flex items-center justify-between">
-          <div className="min-w-0 flex-1">
-            <p className="text-sm text-muted-foreground mb-1">Your Projects</p>
-            <p
-              className={`text-2xl md:text-3xl font-bold break-all ${ongoingProjectsCount >= 3 ? "text-red-600 dark:text-red-400" : "text-accent"}`}
-            >
-              {ongoingProjectsCount}/3
-            </p>
-            {ongoingProjectsCount >= 3 && (
-              <p className="text-xs text-red-600 dark:text-red-400 mt-1">
-                Limit reached
+      {isClientUser && (
+        <Card
+          className={`glass p-4 md:p-6 ${ongoingProjectsCount >= 3 ? "border-red-200 dark:border-red-800" : "border-accent/20"}`}
+        >
+          <div className="flex items-center justify-between">
+            <div className="min-w-0 flex-1">
+              <p className="text-sm text-muted-foreground mb-1">Your Projects</p>
+              <p
+                className={`text-2xl md:text-3xl font-bold break-all ${ongoingProjectsCount >= 3 ? "text-red-600 dark:text-red-400" : "text-accent"}`}
+              >
+                {ongoingProjectsCount}/3
               </p>
-            )}
+              {ongoingProjectsCount >= 3 && (
+                <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+                  Limit reached
+                </p>
+              )}
+            </div>
+            <User
+              className={`h-8 w-8 md:h-10 md:w-10 opacity-50 shrink-0 ${ongoingProjectsCount >= 3 ? "text-red-600 dark:text-red-400" : "text-accent"}`}
+            />
           </div>
-          <User
-            className={`h-8 w-8 md:h-10 md:w-10 opacity-50 shrink-0 ${ongoingProjectsCount >= 3 ? "text-red-600 dark:text-red-400" : "text-accent"}`}
-          />
-        </div>
-      </Card>
+        </Card>
+      )}
     </div>
   );
 }

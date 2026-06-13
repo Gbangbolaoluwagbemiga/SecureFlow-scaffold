@@ -16,6 +16,8 @@ pub fn apply_to_job(
     // The freelancer must sign the transaction
     freelancer.require_auth();
 
+    admin::require_not_paused(env)?;
+
     // Check if job creation is paused
     if admin::is_job_creation_paused(env) {
         return Err(Error::from_contract_error(SecureFlowError::JobCreationPaused as u32));
@@ -89,6 +91,7 @@ pub fn apply_to_job(
 
 pub fn accept_freelancer(env: &Env, escrow_id: u32, depositor: Address, freelancer: Address) -> Result<(), Error> {
     depositor.require_auth();
+    admin::require_not_paused(env)?;
 
     escrow_core::require_valid_escrow(env, escrow_id)?;
     let mut escrow = escrow_core::get_escrow(env, escrow_id)
@@ -164,9 +167,9 @@ pub fn get_applications(env: &Env, escrow_id: u32) -> Vec<Application> {
     env.storage()
         .instance()
         .extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
-    
+
     let mut applications = Vec::new(env);
-    
+
     // Check all possible application indices
     for app_index in 0..MAX_APPLICATIONS {
         let key = DataKey::Application(escrow_id, app_index);
@@ -174,7 +177,51 @@ pub fn get_applications(env: &Env, escrow_id: u32) -> Vec<Application> {
             applications.push_back(application);
         }
     }
-    
+
     applications
+}
+
+/// Get a page of applications for an escrow.
+/// `offset` is the zero-based starting position; `limit` is the max entries to return.
+pub fn get_applications_page(env: &Env, escrow_id: u32, offset: u32, limit: u32) -> Vec<Application> {
+    env.storage()
+        .instance()
+        .extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
+
+    let mut result = Vec::new(env);
+    let mut seen: u32 = 0;
+    let mut returned: u32 = 0;
+
+    for app_index in 0..MAX_APPLICATIONS {
+        if returned >= limit {
+            break;
+        }
+        let key = DataKey::Application(escrow_id, app_index);
+        if let Some(application) = env.storage().instance().get::<DataKey, Application>(&key) {
+            if seen >= offset {
+                result.push_back(application);
+                returned += 1;
+            }
+            seen += 1;
+        }
+    }
+
+    result
+}
+
+/// Return the total number of applications for an escrow.
+pub fn get_application_count(env: &Env, escrow_id: u32) -> u32 {
+    env.storage()
+        .instance()
+        .extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
+
+    let mut count: u32 = 0;
+    for app_index in 0..MAX_APPLICATIONS {
+        let key = DataKey::Application(escrow_id, app_index);
+        if env.storage().instance().has(&key) {
+            count += 1;
+        }
+    }
+    count
 }
 

@@ -70,6 +70,8 @@ import {
   MessageCircle as MessageCircleFreelancer,
 } from "lucide-react";
 import { Link } from "react-router-dom";
+import { EvidenceSubmissionButton } from "@/components/evidence-submission-button";
+import { ViewEvidenceButton } from "@/components/view-evidence-button";
 
 interface Escrow {
   id: string;
@@ -1919,15 +1921,17 @@ export default function FreelancerPage() {
                                             </p>
                                           </div>
                                         )}
-                                        <div className="flex gap-2">
-                                          <Button
-                                            size="sm"
-                                            variant="outline"
-                                            disabled
-                                            className="border-orange-300 dark:border-orange-600 text-orange-700 dark:text-orange-300"
-                                          >
-                                            Under Review
-                                          </Button>
+                                        <div className="flex gap-2 flex-wrap">
+                                          <EvidenceSubmissionButton
+                                            escrowId={String(escrow.id)}
+                                            milestoneIndex={index}
+                                          />
+                                          <ViewEvidenceButton
+                                            escrowId={String(escrow.id)}
+                                            milestoneIndex={index}
+                                            clientAddress={escrow.payer}
+                                            freelancerAddress={escrow.beneficiary}
+                                          />
                                         </div>
                                       </div>
                                     )}

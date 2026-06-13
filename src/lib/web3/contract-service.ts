@@ -142,7 +142,7 @@ export class ContractService {
         networkPassphrase: this.network.networkPassphrase,
       })
         .addOperation(
-          contract.call("get_escrow", nativeToScVal(escrowId, { type: "u32" })),
+          contract.call("get_escrow", nativeToScVal(escrowId, { type: "u32" }))
         )
         .setTimeout(30)
         .build();
@@ -162,7 +162,7 @@ export class ContractService {
           return null;
         }
         throw new Error(
-          `Transaction simulation failed: ${errorValue.toString()}`,
+          `Transaction simulation failed: ${errorValue.toString()}`
         );
       }
 
@@ -226,7 +226,7 @@ export class ContractService {
                   (keyBuffer.type === "Buffer" && keyBuffer.data)
                 ) {
                   keyStr = String.fromCharCode(
-                    ...(keyBuffer.data || keyBuffer),
+                    ...(keyBuffer.data || keyBuffer)
                   );
                 } else if (typeof keyBuffer === "string") {
                   keyStr = keyBuffer;
@@ -648,8 +648,8 @@ export class ContractService {
         .addOperation(
           contract.call(
             "get_milestones",
-            nativeToScVal(escrowId, { type: "u32" }),
-          ),
+            nativeToScVal(escrowId, { type: "u32" })
+          )
         )
         .setTimeout(30)
         .build();
@@ -695,7 +695,8 @@ export class ContractService {
               resolution_amount: m.resolution_amount || m[11] || undefined,
             }));
           }
-        } catch (e) {}
+        } catch (e) {
+        }
       }
 
       return [];
@@ -709,9 +710,10 @@ export class ContractService {
    */
   async hasUserApplied(
     escrowId: number,
-    userAddress: string,
+    userAddress: string
   ): Promise<boolean> {
     try {
+
       // Try using the contract's has_applied function first
       try {
         const contract = new Contract(this.contractId);
@@ -733,8 +735,8 @@ export class ContractService {
             contract.call(
               "has_applied",
               nativeToScVal(escrowId, { type: "u32" }),
-              nativeToScVal(userAddress, { type: "address" }),
-            ),
+              nativeToScVal(userAddress, { type: "address" })
+            )
           )
           .setTimeout(30)
           .build();
@@ -773,10 +775,12 @@ export class ContractService {
             const result = scValToNative(returnValue as xdr.ScVal);
             const hasApplied = Boolean(result);
             return hasApplied;
-          } catch (e) {}
+          } catch (e) {
+          }
         } else {
         }
-      } catch (contractError) {}
+      } catch (contractError) {
+      }
 
       // Fallback: Use getApplications to get all applications and check if user is in the list
       const applications = await this.getApplications(escrowId);
@@ -785,7 +789,7 @@ export class ContractService {
         (app) =>
           app.freelancer &&
           app.freelancer.toLowerCase().trim() ===
-            userAddress.toLowerCase().trim(),
+            userAddress.toLowerCase().trim()
       );
 
       return hasApplied;
@@ -798,7 +802,7 @@ export class ContractService {
    * Get badge for a freelancer
    */
   async getBadge(
-    freelancerAddress: string,
+    freelancerAddress: string
   ): Promise<"Beginner" | "Intermediate" | "Advanced" | "Expert"> {
     try {
       const contract = new Contract(this.contractId);
@@ -819,8 +823,8 @@ export class ContractService {
         .addOperation(
           contract.call(
             "get_badge",
-            nativeToScVal(freelancerAddress, { type: "address" }),
-          ),
+            nativeToScVal(freelancerAddress, { type: "address" })
+          )
         )
         .setTimeout(30)
         .build();
@@ -858,7 +862,7 @@ export class ContractService {
    * Get average rating for a freelancer
    */
   async getAverageRating(
-    freelancerAddress: string,
+    freelancerAddress: string
   ): Promise<{ average: number; count: number }> {
     try {
       const contract = new Contract(this.contractId);
@@ -879,8 +883,8 @@ export class ContractService {
         .addOperation(
           contract.call(
             "get_average_rating",
-            nativeToScVal(freelancerAddress, { type: "address" }),
-          ),
+            nativeToScVal(freelancerAddress, { type: "address" })
+          )
         )
         .setTimeout(30)
         .build();
@@ -916,7 +920,7 @@ export class ContractService {
     escrowId: number,
     rating: number,
     review: string,
-    walletAddress?: string,
+    walletAddress?: string
   ): Promise<string> {
     try {
       // Use provided wallet address, or fallback to store
@@ -934,13 +938,13 @@ export class ContractService {
             : null;
         if (!walletId) {
           throw new Error(
-            "Wallet not connected. Please connect your wallet first.",
+            "Wallet not connected. Please connect your wallet first."
           );
         }
         // If we have walletId but no address, try to get it from the wallet store
         // This is a fallback - ideally the address should be passed in
         throw new Error(
-          "Wallet address not found. Please reconnect your wallet.",
+          "Wallet address not found. Please reconnect your wallet."
         );
       }
 
@@ -963,8 +967,8 @@ export class ContractService {
             nativeToScVal(escrowId, { type: "u32" }),
             nativeToScVal(rating, { type: "u32" }),
             nativeToScVal(review, { type: "string" }),
-            nativeToScVal(address, { type: "address" }),
-          ),
+            nativeToScVal(address, { type: "address" })
+          )
         )
         .setTimeout(30)
         .build();
@@ -982,7 +986,7 @@ export class ContractService {
         const errorValue =
           (simulation.errorResult as any).value?.() || simulation.errorResult;
         throw new Error(
-          `Transaction simulation failed: ${errorValue.toString()}`,
+          `Transaction simulation failed: ${errorValue.toString()}`
         );
       }
 
@@ -993,11 +997,11 @@ export class ContractService {
       if (authEntries && authEntries.length > 0) {
         const signedAuthEntries = await signAuthEntries(
           authEntries as any[],
-          address,
+          address
         );
 
         const parsedSignedAuth = signedAuthEntries.map((signed: string) =>
-          xdr.SorobanAuthorizationEntry.fromXDR(signed, "base64"),
+          xdr.SorobanAuthorizationEntry.fromXDR(signed, "base64")
         );
 
         const operations = prepared.operations;
@@ -1040,7 +1044,7 @@ export class ContractService {
 
       const signedTransaction = TransactionBuilder.fromXDR(
         signedTxXdr,
-        this.network.networkPassphrase,
+        this.network.networkPassphrase
       );
 
       const sendResponse =
@@ -1088,7 +1092,7 @@ export class ContractService {
         networkPassphrase: this.network.networkPassphrase,
       })
         .addOperation(
-          contract.call("get_rating", nativeToScVal(escrowId, { type: "u32" })),
+          contract.call("get_rating", nativeToScVal(escrowId, { type: "u32" }))
         )
         .setTimeout(30)
         .build();
@@ -1138,7 +1142,7 @@ export class ContractService {
         nativeToScVal(params.review, { type: "string" }),
         nativeToScVal(params.freelancer, { type: "address" }),
       ],
-      params.freelancer,
+      params.freelancer
     );
   }
 
@@ -1166,18 +1170,14 @@ export class ContractService {
         networkPassphrase: this.network.networkPassphrase,
       })
         .addOperation(
-          contract.call(
-            "get_client_rating",
-            nativeToScVal(escrowId, { type: "u32" }),
-          ),
+          contract.call("get_client_rating", nativeToScVal(escrowId, { type: "u32" }))
         )
         .setTimeout(30)
         .build();
       const simulation = await this.rpcServer.simulateTransaction(tx);
       if ("errorResult" in simulation && simulation.errorResult) return null;
-      const retval =
-        ("result" in simulation && (simulation.result as any)?.retval) ||
-        ("returnValue" in simulation && simulation.returnValue);
+      const retval = ("result" in simulation && (simulation.result as any)?.retval)
+        || ("returnValue" in simulation && simulation.returnValue);
       if (!retval) return null;
       const r = scValToNative(retval as xdr.ScVal) as any;
       if (!r) return null;
@@ -1189,15 +1189,11 @@ export class ContractService {
         review: r.review ?? "",
         ratedAt: r.rated_at ?? 0,
       };
-    } catch {
-      return null;
-    }
+    } catch { return null; }
   }
 
   /** Get average client rating → { average, count } */
-  async getAverageClientRating(
-    clientAddress: string,
-  ): Promise<{ average: number; count: number }> {
+  async getAverageClientRating(clientAddress: string): Promise<{ average: number; count: number }> {
     try {
       const contract = new Contract(this.contractId);
       const sourceAddress =
@@ -1215,29 +1211,22 @@ export class ContractService {
         .addOperation(
           contract.call(
             "get_average_client_rating",
-            nativeToScVal(clientAddress, { type: "address" }),
-          ),
+            nativeToScVal(clientAddress, { type: "address" })
+          )
         )
         .setTimeout(30)
         .build();
       const simulation = await this.rpcServer.simulateTransaction(tx);
-      if ("errorResult" in simulation && simulation.errorResult)
-        return { average: 0, count: 0 };
-      const retval =
-        ("result" in simulation && (simulation.result as any)?.retval) ||
-        ("returnValue" in simulation && simulation.returnValue);
+      if ("errorResult" in simulation && simulation.errorResult) return { average: 0, count: 0 };
+      const retval = ("result" in simulation && (simulation.result as any)?.retval)
+        || ("returnValue" in simulation && simulation.returnValue);
       if (!retval) return { average: 0, count: 0 };
       const tuple = scValToNative(retval as xdr.ScVal) as any;
       if (!tuple) return { average: 0, count: 0 };
-      const total = Number(Array.isArray(tuple) ? tuple[0] : (tuple[0] ?? 0));
-      const count = Number(Array.isArray(tuple) ? tuple[1] : (tuple[1] ?? 0));
-      return {
-        average: count > 0 ? Math.round((total / count) * 10) / 10 : 0,
-        count,
-      };
-    } catch {
-      return { average: 0, count: 0 };
-    }
+      const total = Number(Array.isArray(tuple) ? tuple[0] : tuple[0] ?? 0);
+      const count = Number(Array.isArray(tuple) ? tuple[1] : tuple[1] ?? 0);
+      return { average: count > 0 ? Math.round((total / count) * 10) / 10 : 0, count };
+    } catch { return { average: 0, count: 0 }; }
   }
 
   /**
@@ -1276,8 +1265,8 @@ export class ContractService {
           .addOperation(
             contract.call(
               "get_applications",
-              nativeToScVal(escrowId, { type: "u32" }),
-            ),
+              nativeToScVal(escrowId, { type: "u32" })
+            )
           )
           .setTimeout(30)
           .build();
@@ -1319,19 +1308,20 @@ export class ContractService {
               const applications = result.map((app: any) => ({
                 freelancer: String(app.freelancer || app[0] || ""),
                 cover_letter: String(
-                  app.cover_letter || app.coverLetter || app[1] || "",
+                  app.cover_letter || app.coverLetter || app[1] || ""
                 ),
                 proposed_timeline: Number(
-                  app.proposed_timeline || app.proposedTimeline || app[2] || 0,
+                  app.proposed_timeline || app.proposedTimeline || app[2] || 0
                 ),
                 applied_at: Number(
-                  app.applied_at || app.appliedAt || app[3] || 0,
+                  app.applied_at || app.appliedAt || app[3] || 0
                 ),
               }));
               return applications;
             } else {
             }
-          } catch (e) {}
+          } catch (e) {
+          }
         } else {
           // Log the simulation structure to debug (but don't stringify - might have circular refs)
           // Check if result exists but in a different structure
@@ -1347,7 +1337,7 @@ export class ContractService {
                   const applicationsWithMetadata = await Promise.all(
                     parsed.map(async (app: any) => {
                       const freelancerAddress = String(
-                        app.freelancer || app[0] || "",
+                        app.freelancer || app[0] || ""
                       );
                       const [badge, ratingInfo] = await Promise.all([
                         this.getBadge(freelancerAddress),
@@ -1357,27 +1347,28 @@ export class ContractService {
                       return {
                         freelancer: freelancerAddress,
                         cover_letter: String(
-                          app.cover_letter || app.coverLetter || app[1] || "",
+                          app.cover_letter || app.coverLetter || app[1] || ""
                         ),
                         proposed_timeline: Number(
                           app.proposed_timeline ||
                             app.proposedTimeline ||
                             app[2] ||
-                            0,
+                            0
                         ),
                         applied_at: Number(
-                          app.applied_at || app.appliedAt || app[3] || 0,
+                          app.applied_at || app.appliedAt || app[3] || 0
                         ),
                         badge,
                         averageRating: ratingInfo.average,
                         ratingCount: ratingInfo.count,
                       };
-                    }),
+                    })
                   );
 
                   return applicationsWithMetadata;
                 }
-              } catch (e) {}
+              } catch (e) {
+              }
             }
           }
           if ((simulation as any).transactionData) {
@@ -1390,25 +1381,27 @@ export class ContractService {
                   const applications = parsed.map((app: any) => ({
                     freelancer: String(app.freelancer || app[0] || ""),
                     cover_letter: String(
-                      app.cover_letter || app.coverLetter || app[1] || "",
+                      app.cover_letter || app.coverLetter || app[1] || ""
                     ),
                     proposed_timeline: Number(
                       app.proposed_timeline ||
                         app.proposedTimeline ||
                         app[2] ||
-                        0,
+                        0
                     ),
                     applied_at: Number(
-                      app.applied_at || app.appliedAt || app[3] || 0,
+                      app.applied_at || app.appliedAt || app[3] || 0
                     ),
                   }));
                   return applications;
                 }
-              } catch (e) {}
+              } catch (e) {
+              }
             }
           }
         }
-      } catch (contractError) {}
+      } catch (contractError) {
+      }
 
       // Fallback: Read from storage directly
       const applications: Array<{
@@ -1442,7 +1435,7 @@ export class ContractService {
               contract: Address.fromString(this.contractId).toScAddress(),
               key: applicationKey,
               durability: xdr.ContractDataDurability.persistent(),
-            }),
+            })
           );
 
           const entry = await this.rpcServer.getLedgerEntries(ledgerKey);
@@ -1481,17 +1474,17 @@ export class ContractService {
                     coverLetter = String(
                       applicationData.cover_letter ||
                         applicationData.coverLetter ||
-                        "",
+                        ""
                     );
                     proposedTimeline = Number(
                       applicationData.proposed_timeline ||
                         applicationData.proposedTimeline ||
-                        0,
+                        0
                     );
                     appliedAt = Number(
                       applicationData.applied_at ||
                         applicationData.appliedAt ||
-                        0,
+                        0
                     );
                   } else if (
                     Array.isArray(applicationData) &&
@@ -1537,6 +1530,7 @@ export class ContractService {
 
   async getNextEscrowId(): Promise<number> {
     try {
+
       // WORKAROUND: Since NextEscrowId is in instance storage and hard to read directly,
       // we'll count escrows by checking each ID until we find one that doesn't exist
       // This is the most reliable way to get the count from the blockchain
@@ -1622,8 +1616,8 @@ export class ContractService {
         .addOperation(
           contract.call(
             "get_reputation",
-            nativeToScVal(userAddress, { type: "address" }),
-          ),
+            nativeToScVal(userAddress, { type: "address" })
+          )
         )
         .setTimeout(30)
         .build();
@@ -1690,23 +1684,19 @@ export class ContractService {
         return { ok: true, jobCreationPaused: assembledTx.result as boolean };
       }
 
-      const simData = assembledTx.simulationData as
-        | Record<string, unknown>
-        | undefined;
+      const simData = assembledTx.simulationData as Record<string, unknown> | undefined;
       if (simData) {
         if (typeof simData.error === "string" && simData.error.length > 0) {
           return {
             ok: false,
             userMessage: this.mapHealthRpcMessage(
               simData.error,
-              misconfiguredMessage,
+              misconfiguredMessage
             ),
           };
         }
         if ("returnValue" in simData && simData.returnValue) {
-          const paused = scValToNative(
-            simData.returnValue as xdr.ScVal,
-          ) as boolean;
+          const paused = scValToNative(simData.returnValue as xdr.ScVal) as boolean;
           return { ok: true, jobCreationPaused: paused };
         }
       }
@@ -1728,7 +1718,7 @@ export class ContractService {
 
   private mapHealthRpcMessage(
     raw: string,
-    misconfiguredMessage: string,
+    misconfiguredMessage: string
   ): string {
     const m = raw.toLowerCase();
     if (
@@ -1832,14 +1822,14 @@ export class ContractService {
                 const pubKey = accountId.ed25519();
                 const { Keypair } = await import("@stellar/stellar-sdk");
                 ownerAddress = Keypair.fromPublicKey(
-                  pubKey.toString("hex"),
+                  pubKey.toString("hex")
                 ).publicKey();
               }
             }
           }
         } catch (e2: any) {
           throw new Error(
-            `Failed to extract owner from contract result: ${e.message || e}`,
+            `Failed to extract owner from contract result: ${e.message || e}`
           );
         }
       }
@@ -1855,15 +1845,11 @@ export class ContractService {
     }
   }
 
-  private async simulateReadonly(
-    method: string,
-    args: any[] = [],
-  ): Promise<xdr.ScVal> {
+  private async simulateReadonly(method: string, args: any[] = []): Promise<xdr.ScVal> {
     this.syncFromConfig();
     this.assertValidContractId();
     const contract = new Contract(this.contractId);
-    const sourceAddress =
-      "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
+    const sourceAddress = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
     const sourceAccount = {
       accountId: () => sourceAddress,
       sequenceNumber: () => "0",
@@ -1881,8 +1867,7 @@ export class ContractService {
     const simulation = await this.rpcServer.simulateTransaction(tx);
     if ("errorResult" in simulation && (simulation as any).errorResult) {
       const errorValue =
-        (simulation as any).errorResult?.value?.() ||
-        (simulation as any).errorResult;
+        (simulation as any).errorResult?.value?.() || (simulation as any).errorResult;
       throw new Error(`Contract ${method} failed: ${errorValue.toString()}`);
     }
 
@@ -1933,11 +1918,9 @@ export class ContractService {
     return native.map((a) => String(a));
   }
 
-  async getOverdueRequest(escrowId: number): Promise<{
-    requester: string;
-    reason: string;
-    requested_at: number;
-  } | null> {
+  async getOverdueRequest(
+    escrowId: number,
+  ): Promise<{ requester: string; reason: string; requested_at: number } | null> {
     try {
       const rv = await this.simulateReadonly("get_overdue_request", [
         nativeToScVal(escrowId, { type: "u32" }),
@@ -1968,7 +1951,7 @@ export class ContractService {
       // Convert milestones to tuples [i128, string]
       // The contract expects i128 (bigint) for amounts, so we need to convert strings to bigint
       const milestones: Array<[bigint, string]> = params.milestones.map(
-        ([amount, description]) => [BigInt(amount), description],
+        ([amount, description]) => [BigInt(amount), description]
       );
 
       // Build transaction manually with depositor as source account
@@ -1984,23 +1967,24 @@ export class ContractService {
 
       // Convert arbiters array to ScVal vector
       const arbitersScVals = params.arbiters.map((arbiter) =>
-        nativeToScVal(arbiter, { type: "address" }),
+        nativeToScVal(arbiter, { type: "address" })
       );
       const arbitersScVal = xdr.ScVal.scvVec(arbitersScVals);
 
       const requiredConfirmationsScVal = nativeToScVal(
         params.required_confirmations,
-        { type: "u32" },
+        { type: "u32" }
       );
 
-      // Convert milestones array to ScVal vector
-      // Each milestone is a tuple [i128, string]
-      const milestonesScVals = milestones.map(([amount, description]) => {
-        const amountScVal = nativeToScVal(amount, { type: "i128" });
-        const descriptionScVal = nativeToScVal(description, { type: "string" });
-        return xdr.ScVal.scvVec([amountScVal, descriptionScVal]);
-      });
-      const milestonesScVal = xdr.ScVal.scvVec(milestonesScVals);
+      // lib.rs ABI: milestones: Vec<(i128, String)> — each milestone is a tuple serialised as scvVec([i128, String])
+      const milestonesScVal = xdr.ScVal.scvVec(
+        milestones.map(([amount, description]) =>
+          xdr.ScVal.scvVec([
+            nativeToScVal(amount, { type: "i128" }),
+            nativeToScVal(description, { type: "string" }),
+          ])
+        )
+      );
 
       const tokenScVal = params.token
         ? nativeToScVal(params.token, { type: "address" })
@@ -2014,7 +1998,7 @@ export class ContractService {
       });
       const projectDescriptionScVal = nativeToScVal(
         params.project_description,
-        { type: "string" },
+        { type: "string" }
       );
 
       // Build transaction with depositor as source account
@@ -2027,7 +2011,8 @@ export class ContractService {
       // The contract's create_escrow function will transfer tokens (including native XLM) from the depositor
       // No need to add a separate SAC transfer operation here
 
-      // Add the contract invocation
+      // lib.rs ABI: 10 params — (depositor, beneficiary, arbiters, required_confirmations,
+      //   milestones: Vec<(i128,String)>, token, total_amount, duration, project_title, project_description)
       txBuilder.addOperation(
         contract.call(
           "create_escrow",
@@ -2040,8 +2025,8 @@ export class ContractService {
           totalAmountScVal,
           durationScVal,
           projectTitleScVal,
-          projectDescriptionScVal,
-        ),
+          projectDescriptionScVal
+        )
       );
 
       const tx = txBuilder.setTimeout(30).build();
@@ -2054,13 +2039,12 @@ export class ContractService {
       const authEntries =
         "auth" in simulation && simulation.auth ? simulation.auth : [];
 
-      // Check if simulation failed
+      // Check if simulation failed — SDK may surface as .error string or .errorResult
+      const simError = (simulation as any).error ?? null;
+      if (simError) throw new Error(`Simulation failed: ${simError}`);
       if ("errorResult" in simulation && simulation.errorResult) {
-        const errorValue =
-          (simulation.errorResult as any).value?.() || simulation.errorResult;
-        throw new Error(
-          `Transaction simulation failed: ${errorValue.toString()}`,
-        );
+        const ev = (simulation.errorResult as any).value?.() ?? simulation.errorResult;
+        throw new Error(`Simulation failed: ${ev.toString()}`);
       }
 
       // Get the escrow ID from simulation if available
@@ -2116,7 +2100,8 @@ export class ContractService {
           if (typeof result === "number") {
             escrowIdFromSimulation = result;
           }
-        } catch (e) {}
+        } catch (e) {
+        }
       } else {
         if ((simulation as any).result) {
         }
@@ -2129,12 +2114,12 @@ export class ContractService {
       if (Array.isArray(authEntries) && authEntries.length > 0) {
         const signedAuthEntries = await signAuthEntries(
           authEntries as any[],
-          walletAddress,
+          walletAddress
         );
         // Rebuild transaction with signed auth entries
         const { xdr } = await import("@stellar/stellar-sdk");
         const parsedSignedAuth = signedAuthEntries.map((signed: string) =>
-          xdr.SorobanAuthorizationEntry.fromXDR(signed, "base64"),
+          xdr.SorobanAuthorizationEntry.fromXDR(signed, "base64")
         );
 
         const operations = prepared.operations;
@@ -2168,10 +2153,7 @@ export class ContractService {
           });
 
           const newTx = newTxBuilder
-            .setSorobanData(
-              (prepared as any).getSorobanData?.() ??
-                (prepared as any).sorobanData,
-            )
+            .setSorobanData((prepared as any).getSorobanData?.() ?? (prepared as any).sorobanData)
             .setTimeout(30)
             .build();
 
@@ -2182,7 +2164,7 @@ export class ContractService {
 
           const signedTransaction = TransactionBuilder.fromXDR(
             signedTxXdr,
-            this.network.networkPassphrase,
+            this.network.networkPassphrase
           );
 
           const sendResponse =
@@ -2239,7 +2221,7 @@ export class ContractService {
                 // Has xdr property
                 resultScVal = xdr.ScVal.fromXDR(
                   (resultXdr as any).xdr,
-                  "base64",
+                  "base64"
                 );
               } else {
                 // Try to use it as is, but check if it has the right structure
@@ -2274,7 +2256,8 @@ export class ContractService {
               if (typeof result === "number") {
                 return result;
               }
-            } catch (e) {}
+            } catch (e) {
+            }
           }
 
           throw new Error("Could not get escrow ID from transaction");
@@ -2289,7 +2272,7 @@ export class ContractService {
 
       const signedTransaction = TransactionBuilder.fromXDR(
         signedTxXdr,
-        this.network.networkPassphrase,
+        this.network.networkPassphrase
       );
 
       const sendResponse =
@@ -2401,7 +2384,8 @@ export class ContractService {
           if (typeof result === "number") {
             return result;
           }
-        } catch (e) {}
+        } catch (e) {
+        }
       }
 
       throw new Error("Could not get escrow ID from transaction");
@@ -2416,6 +2400,7 @@ export class ContractService {
     if (!beneficiary) {
       throw new Error("Beneficiary address is required");
     }
+
 
     try {
       // Build transaction manually with beneficiary as source account
@@ -2437,11 +2422,12 @@ export class ContractService {
           contract.call(
             "start_work",
             nativeToScVal(escrowId, { type: "u32" }),
-            nativeToScVal(beneficiary, { type: "address" }),
-          ),
+            nativeToScVal(beneficiary, { type: "address" })
+          )
         )
         .setTimeout(30)
         .build();
+
 
       const simulation = await this.rpcServer.simulateTransaction(tx);
 
@@ -2452,11 +2438,12 @@ export class ContractService {
             : []
           : [];
 
+
       if ("errorResult" in simulation && simulation.errorResult) {
         const errorValue =
           (simulation.errorResult as any).value?.() || simulation.errorResult;
         throw new Error(
-          `Transaction simulation failed: ${errorValue.toString()}`,
+          `Transaction simulation failed: ${errorValue.toString()}`
         );
       }
 
@@ -2467,11 +2454,11 @@ export class ContractService {
       if (authEntries && authEntries.length > 0) {
         const signedAuthEntries = await signAuthEntries(
           authEntries as any[],
-          beneficiary,
+          beneficiary
         );
 
         const parsedSignedAuth = signedAuthEntries.map((signed: string) =>
-          xdr.SorobanAuthorizationEntry.fromXDR(signed, "base64"),
+          xdr.SorobanAuthorizationEntry.fromXDR(signed, "base64")
         );
 
         const operations = prepared.operations;
@@ -2491,10 +2478,7 @@ export class ContractService {
               networkPassphrase: this.network.networkPassphrase,
             })
               .addOperation(newOp)
-              .setSorobanData(
-                (prepared as any).getSorobanData?.() ??
-                  (prepared as any).sorobanData,
-              )
+              .setSorobanData((prepared as any).getSorobanData?.() ?? (prepared as any).sorobanData)
               .setTimeout(30)
               .build();
 
@@ -2515,9 +2499,10 @@ export class ContractService {
         });
       }
 
+
       const signedTransaction = TransactionBuilder.fromXDR(
         signedTxXdr,
-        this.network.networkPassphrase,
+        this.network.networkPassphrase
       );
 
       const sendResponse =
@@ -2549,6 +2534,7 @@ export class ContractService {
       throw new Error("Beneficiary address is required");
     }
 
+
     try {
       // Build transaction manually with beneficiary as source account
       // This ensures the simulation detects auth requirements
@@ -2571,11 +2557,12 @@ export class ContractService {
             nativeToScVal(params.escrow_id, { type: "u32" }),
             nativeToScVal(params.milestone_index, { type: "u32" }),
             nativeToScVal(params.description, { type: "string" }),
-            nativeToScVal(params.beneficiary, { type: "address" }),
-          ),
+            nativeToScVal(params.beneficiary, { type: "address" })
+          )
         )
         .setTimeout(30)
         .build();
+
 
       const simulation = await this.rpcServer.simulateTransaction(tx);
 
@@ -2586,11 +2573,12 @@ export class ContractService {
             : []
           : [];
 
+
       if ("errorResult" in simulation && simulation.errorResult) {
         const errorValue =
           (simulation.errorResult as any).value?.() || simulation.errorResult;
         throw new Error(
-          `Transaction simulation failed: ${errorValue.toString()}`,
+          `Transaction simulation failed: ${errorValue.toString()}`
         );
       }
 
@@ -2601,11 +2589,11 @@ export class ContractService {
       if (authEntries && authEntries.length > 0) {
         const signedAuthEntries = await signAuthEntries(
           authEntries as any[],
-          params.beneficiary,
+          params.beneficiary
         );
 
         const parsedSignedAuth = signedAuthEntries.map((signed: string) =>
-          xdr.SorobanAuthorizationEntry.fromXDR(signed, "base64"),
+          xdr.SorobanAuthorizationEntry.fromXDR(signed, "base64")
         );
 
         const operations = prepared.operations;
@@ -2620,7 +2608,7 @@ export class ContractService {
             } as any);
 
             const freshAccount = await this.rpcServer.getAccount(
-              params.beneficiary,
+              params.beneficiary
             );
             const newTx = new TransactionBuilder(freshAccount, {
               fee: prepared.fee,
@@ -2648,9 +2636,10 @@ export class ContractService {
         });
       }
 
+
       const signedTransaction = TransactionBuilder.fromXDR(
         signedTxXdr,
-        this.network.networkPassphrase,
+        this.network.networkPassphrase
       );
 
       const sendResponse =
@@ -2683,6 +2672,7 @@ export class ContractService {
       throw new Error("Beneficiary address is required");
     }
 
+
     try {
       const { Contract, nativeToScVal, TransactionBuilder, Operation, xdr } =
         await import("@stellar/stellar-sdk");
@@ -2703,11 +2693,12 @@ export class ContractService {
             nativeToScVal(params.escrow_id, { type: "u32" }),
             nativeToScVal(params.milestone_index, { type: "u32" }),
             nativeToScVal(params.description, { type: "string" }),
-            nativeToScVal(params.beneficiary, { type: "address" }),
-          ),
+            nativeToScVal(params.beneficiary, { type: "address" })
+          )
         )
         .setTimeout(30)
         .build();
+
 
       const simulation = await this.rpcServer.simulateTransaction(tx);
 
@@ -2718,11 +2709,12 @@ export class ContractService {
             : []
           : [];
 
+
       if ("errorResult" in simulation && simulation.errorResult) {
         const errorValue =
           (simulation.errorResult as any).value?.() || simulation.errorResult;
         throw new Error(
-          `Transaction simulation failed: ${errorValue.toString()}`,
+          `Transaction simulation failed: ${errorValue.toString()}`
         );
       }
 
@@ -2733,11 +2725,11 @@ export class ContractService {
       if (authEntries && authEntries.length > 0) {
         const signedAuthEntries = await signAuthEntries(
           authEntries as any[],
-          params.beneficiary,
+          params.beneficiary
         );
 
         const parsedSignedAuth = signedAuthEntries.map((signed: string) =>
-          xdr.SorobanAuthorizationEntry.fromXDR(signed, "base64"),
+          xdr.SorobanAuthorizationEntry.fromXDR(signed, "base64")
         );
 
         const operations = prepared.operations;
@@ -2777,9 +2769,10 @@ export class ContractService {
         });
       }
 
+
       const signedTransaction = TransactionBuilder.fromXDR(
         signedTxXdr,
-        this.network.networkPassphrase,
+        this.network.networkPassphrase
       );
 
       const sendResponse =
@@ -2824,8 +2817,8 @@ export class ContractService {
             "approve_milestone",
             nativeToScVal(params.escrow_id, { type: "u32" }),
             nativeToScVal(params.milestone_index, { type: "u32" }),
-            nativeToScVal(params.depositor, { type: "address" }),
-          ),
+            nativeToScVal(params.depositor, { type: "address" })
+          )
         )
         .setTimeout(30)
         .build();
@@ -2840,7 +2833,7 @@ export class ContractService {
         const errorValue =
           (simulation.errorResult as any).value?.() || simulation.errorResult;
         throw new Error(
-          `Transaction simulation failed: ${errorValue.toString()}`,
+          `Transaction simulation failed: ${errorValue.toString()}`
         );
       }
       const prepared = await this.rpcServer.prepareTransaction(tx);
@@ -2848,10 +2841,10 @@ export class ContractService {
       if (authEntries && authEntries.length > 0) {
         const signedAuthEntries = await signAuthEntries(
           authEntries as any[],
-          params.depositor,
+          params.depositor
         );
         const parsedSignedAuth = signedAuthEntries.map((signed: string) =>
-          xdr.SorobanAuthorizationEntry.fromXDR(signed, "base64"),
+          xdr.SorobanAuthorizationEntry.fromXDR(signed, "base64")
         );
         const operations = prepared.operations;
         if (operations && operations.length > 0) {
@@ -2864,7 +2857,7 @@ export class ContractService {
               auth: parsedSignedAuth,
             } as any);
             const freshAccount = await this.rpcServer.getAccount(
-              params.depositor,
+              params.depositor
             );
             const newTx = new TransactionBuilder(freshAccount, {
               fee: prepared.fee,
@@ -2892,7 +2885,7 @@ export class ContractService {
       }
       const signedTransaction = TransactionBuilder.fromXDR(
         signedTxXdr,
-        this.network.networkPassphrase,
+        this.network.networkPassphrase
       );
       const sendResponse =
         await this.rpcServer.sendTransaction(signedTransaction);
@@ -2935,8 +2928,8 @@ export class ContractService {
             nativeToScVal(params.escrow_id, { type: "u32" }),
             nativeToScVal(params.milestone_index, { type: "u32" }),
             nativeToScVal(params.reason, { type: "string" }),
-            nativeToScVal(params.depositor, { type: "address" }),
-          ),
+            nativeToScVal(params.depositor, { type: "address" })
+          )
         )
         .setTimeout(30)
         .build();
@@ -2951,7 +2944,7 @@ export class ContractService {
         const errorValue =
           (simulation.errorResult as any).value?.() || simulation.errorResult;
         throw new Error(
-          `Transaction simulation failed: ${errorValue.toString()}`,
+          `Transaction simulation failed: ${errorValue.toString()}`
         );
       }
       const prepared = await this.rpcServer.prepareTransaction(tx);
@@ -2959,10 +2952,10 @@ export class ContractService {
       if (authEntries && authEntries.length > 0) {
         const signedAuthEntries = await signAuthEntries(
           authEntries as any[],
-          params.depositor,
+          params.depositor
         );
         const parsedSignedAuth = signedAuthEntries.map((signed: string) =>
-          xdr.SorobanAuthorizationEntry.fromXDR(signed, "base64"),
+          xdr.SorobanAuthorizationEntry.fromXDR(signed, "base64")
         );
         const operations = prepared.operations;
         if (operations && operations.length > 0) {
@@ -2975,7 +2968,7 @@ export class ContractService {
               auth: parsedSignedAuth,
             } as any);
             const freshAccount = await this.rpcServer.getAccount(
-              params.depositor,
+              params.depositor
             );
             const newTx = new TransactionBuilder(freshAccount, {
               fee: prepared.fee,
@@ -3003,7 +2996,7 @@ export class ContractService {
       }
       const signedTransaction = TransactionBuilder.fromXDR(
         signedTxXdr,
-        this.network.networkPassphrase,
+        this.network.networkPassphrase
       );
       const sendResponse =
         await this.rpcServer.sendTransaction(signedTransaction);
@@ -3046,8 +3039,8 @@ export class ContractService {
             nativeToScVal(params.escrow_id, { type: "u32" }),
             nativeToScVal(params.milestone_index, { type: "u32" }),
             nativeToScVal(params.reason, { type: "string" }),
-            nativeToScVal(params.disputer, { type: "address" }),
-          ),
+            nativeToScVal(params.disputer, { type: "address" })
+          )
         )
         .setTimeout(30)
         .build();
@@ -3062,7 +3055,7 @@ export class ContractService {
         const errorValue =
           (simulation.errorResult as any).value?.() || simulation.errorResult;
         throw new Error(
-          `Transaction simulation failed: ${errorValue.toString()}`,
+          `Transaction simulation failed: ${errorValue.toString()}`
         );
       }
       const prepared = await this.rpcServer.prepareTransaction(tx);
@@ -3070,10 +3063,10 @@ export class ContractService {
       if (authEntries && authEntries.length > 0) {
         const signedAuthEntries = await signAuthEntries(
           authEntries as any[],
-          params.disputer,
+          params.disputer
         );
         const parsedSignedAuth = signedAuthEntries.map((signed: string) =>
-          xdr.SorobanAuthorizationEntry.fromXDR(signed, "base64"),
+          xdr.SorobanAuthorizationEntry.fromXDR(signed, "base64")
         );
         const operations = prepared.operations;
         if (operations && operations.length > 0) {
@@ -3086,7 +3079,7 @@ export class ContractService {
               auth: parsedSignedAuth,
             } as any);
             const freshAccount = await this.rpcServer.getAccount(
-              params.disputer,
+              params.disputer
             );
             const newTx = new TransactionBuilder(freshAccount, {
               fee: prepared.fee,
@@ -3114,7 +3107,7 @@ export class ContractService {
       }
       const signedTransaction = TransactionBuilder.fromXDR(
         signedTxXdr,
-        this.network.networkPassphrase,
+        this.network.networkPassphrase
       );
       const sendResponse =
         await this.rpcServer.sendTransaction(signedTransaction);
@@ -3206,16 +3199,10 @@ export class ContractService {
     const contract = new Contract(this.contractId);
     const sourceAccount = await this.rpcServer.getAccount(address);
 
-    const escrowIdScVal = nativeToScVal(params.escrow_id, { type: "u32" });
-    const coverLetterScVal = nativeToScVal(params.cover_letter, {
-      type: "string",
-    });
-    const timelineScVal = nativeToScVal(params.proposed_timeline, {
-      type: "u32",
-    });
-    const freelancerScVal = nativeToScVal(params.freelancer, {
-      type: "address",
-    });
+    const escrowIdScVal   = nativeToScVal(params.escrow_id,         { type: "u32" });
+    const coverLetterScVal = nativeToScVal(params.cover_letter,     { type: "string" });
+    const timelineScVal    = nativeToScVal(params.proposed_timeline, { type: "u32" });
+    const freelancerScVal  = nativeToScVal(params.freelancer,        { type: "address" });
 
     const tx = new TransactionBuilder(sourceAccount, {
       fee: "100",
@@ -3227,8 +3214,8 @@ export class ContractService {
           escrowIdScVal,
           coverLetterScVal,
           timelineScVal,
-          freelancerScVal,
-        ),
+          freelancerScVal
+        )
       )
       .setTimeout(30)
       .build();
@@ -3254,7 +3241,7 @@ export class ContractService {
     if (authEntries.length > 0) {
       const signedAuth = await signAuthEntries(authEntries as any[], address);
       const parsedSignedAuth = signedAuth.map((s) =>
-        xdr.SorobanAuthorizationEntry.fromXDR(s, "base64"),
+        xdr.SorobanAuthorizationEntry.fromXDR(s, "base64")
       );
 
       const preparedOps = prepared.operations;
@@ -3274,7 +3261,7 @@ export class ContractService {
       })
         .addOperation(newOp)
         .setSorobanData(
-          (prepared as any).getSorobanData?.() ?? (prepared as any).sorobanData,
+          (prepared as any).getSorobanData?.() ?? (prepared as any).sorobanData
         )
         .setTimeout(30)
         .build();
@@ -3309,6 +3296,7 @@ export class ContractService {
 
     const depositorAddress = params.depositor;
 
+
     try {
       // Build transaction manually with depositor as source account
       // This ensures the simulation detects auth requirements
@@ -3327,8 +3315,8 @@ export class ContractService {
             "accept_freelancer",
             nativeToScVal(params.escrow_id, { type: "u32" }),
             nativeToScVal(params.freelancer, { type: "address" }),
-            nativeToScVal(params.depositor, { type: "address" }),
-          ),
+            nativeToScVal(params.depositor, { type: "address" })
+          )
         )
         .setTimeout(30)
         .build();
@@ -3344,12 +3332,13 @@ export class ContractService {
             : []
           : [];
 
+
       // Check if simulation failed
       if ("errorResult" in simulation && simulation.errorResult) {
         const errorValue =
           (simulation.errorResult as any).value?.() || simulation.errorResult;
         throw new Error(
-          `Transaction simulation failed: ${errorValue.toString()}`,
+          `Transaction simulation failed: ${errorValue.toString()}`
         );
       }
 
@@ -3360,13 +3349,13 @@ export class ContractService {
       if (authEntries && authEntries.length > 0) {
         const signedAuthEntries = await signAuthEntries(
           authEntries as any[],
-          depositorAddress,
+          depositorAddress
         );
 
         // Rebuild transaction with signed auth entries
         const { xdr } = await import("@stellar/stellar-sdk");
         const parsedSignedAuth = signedAuthEntries.map((signed: string) =>
-          xdr.SorobanAuthorizationEntry.fromXDR(signed, "base64"),
+          xdr.SorobanAuthorizationEntry.fromXDR(signed, "base64")
         );
 
         const operations = prepared.operations;
@@ -3398,7 +3387,7 @@ export class ContractService {
 
             const signedTransaction = TransactionBuilder.fromXDR(
               signedTxXdr,
-              this.network.networkPassphrase,
+              this.network.networkPassphrase
             );
 
             const sendResponse =
@@ -3425,7 +3414,7 @@ export class ContractService {
 
       const signedTransaction = TransactionBuilder.fromXDR(
         signedTxXdr,
-        this.network.networkPassphrase,
+        this.network.networkPassphrase
       );
 
       const sendResponse =
@@ -3447,7 +3436,7 @@ export class ContractService {
 
   async emergencyRefundAfterDeadline(
     escrowId: number,
-    depositor: string,
+    depositor: string
   ): Promise<string> {
     const { address } = useWalletStore.getState();
     if (!address) {
@@ -3595,7 +3584,7 @@ export class ContractService {
         const errorValue =
           (simulation.errorResult as any).value?.() || simulation.errorResult;
         throw new Error(
-          `Transaction simulation failed: ${errorValue.toString()}`,
+          `Transaction simulation failed: ${errorValue.toString()}`
         );
       }
 
@@ -3606,12 +3595,12 @@ export class ContractService {
       if (Array.isArray(authEntries) && authEntries.length > 0) {
         const signedAuthEntries = await signAuthEntries(
           authEntries as any[],
-          walletAddress,
+          walletAddress
         );
         // Rebuild transaction with signed auth entries
         const { xdr } = await import("@stellar/stellar-sdk");
         const parsedSignedAuth = signedAuthEntries.map((signed: string) =>
-          xdr.SorobanAuthorizationEntry.fromXDR(signed, "base64"),
+          xdr.SorobanAuthorizationEntry.fromXDR(signed, "base64")
         );
 
         const operations = prepared.operations;
@@ -3642,7 +3631,7 @@ export class ContractService {
 
             const signedTransaction = TransactionBuilder.fromXDR(
               signedTxXdr,
-              this.network.networkPassphrase,
+              this.network.networkPassphrase
             );
 
             const sendResponse =
@@ -3669,7 +3658,7 @@ export class ContractService {
 
       const signedTransaction = TransactionBuilder.fromXDR(
         signedTxXdr,
-        this.network.networkPassphrase,
+        this.network.networkPassphrase
       );
 
       const sendResponse =
@@ -3724,7 +3713,7 @@ export class ContractService {
         const errorValue =
           (simulation.errorResult as any).value?.() || simulation.errorResult;
         throw new Error(
-          `Transaction simulation failed: ${errorValue.toString()}`,
+          `Transaction simulation failed: ${errorValue.toString()}`
         );
       }
 
@@ -3735,12 +3724,12 @@ export class ContractService {
       if (Array.isArray(authEntries) && authEntries.length > 0) {
         const signedAuthEntries = await signAuthEntries(
           authEntries as any[],
-          walletAddress,
+          walletAddress
         );
         // Rebuild transaction with signed auth entries
         const { xdr } = await import("@stellar/stellar-sdk");
         const parsedSignedAuth = signedAuthEntries.map((signed: string) =>
-          xdr.SorobanAuthorizationEntry.fromXDR(signed, "base64"),
+          xdr.SorobanAuthorizationEntry.fromXDR(signed, "base64")
         );
 
         const operations = prepared.operations;
@@ -3771,7 +3760,7 @@ export class ContractService {
 
             const signedTransaction = TransactionBuilder.fromXDR(
               signedTxXdr,
-              this.network.networkPassphrase,
+              this.network.networkPassphrase
             );
 
             const sendResponse =
@@ -3798,7 +3787,7 @@ export class ContractService {
 
       const signedTransaction = TransactionBuilder.fromXDR(
         signedTxXdr,
-        this.network.networkPassphrase,
+        this.network.networkPassphrase
       );
 
       const sendResponse =
@@ -3820,42 +3809,12 @@ export class ContractService {
 
   async setPlatformFeeBP(feeBP: number): Promise<string> {
     const { address } = useWalletStore.getState();
-    if (!address) {
-      throw new Error("Wallet not connected");
-    }
-
-    const walletAddress = address;
-
-    try {
-      const assembledTx = await this.client.set_platform_fee_bp({
-        fee_bp: feeBP,
-      });
-
-      const signedTxXdr = await signTransaction({
-        unsignedTransaction: assembledTx.toXDR(),
-        address: walletAddress,
-      });
-
-      const signedTransaction = TransactionBuilder.fromXDR(
-        signedTxXdr,
-        this.network.networkPassphrase,
-      );
-
-      const sendResponse =
-        await this.rpcServer.sendTransaction(signedTransaction);
-
-      if (sendResponse.status === "ERROR") {
-        throw new Error("Transaction failed");
-      }
-
-      if (sendResponse.status === "PENDING" && sendResponse.hash) {
-        return await this.waitForConfirmation(sendResponse.hash);
-      }
-
-      return sendResponse.hash || "";
-    } catch (error: any) {
-      throw error;
-    }
+    if (!address) throw new Error("Wallet not connected");
+    return this.sendOwnerTransaction(
+      "set_platform_fee_bp",
+      [nativeToScVal(feeBP, { type: "u32" })],
+      address
+    );
   }
 
   async setFeeCollector(feeCollector: string): Promise<string> {
@@ -3878,7 +3837,7 @@ export class ContractService {
 
       const signedTransaction = TransactionBuilder.fromXDR(
         signedTxXdr,
-        this.network.networkPassphrase,
+        this.network.networkPassphrase
       );
 
       const sendResponse =
@@ -3954,8 +3913,7 @@ export class ContractService {
     const simulation = await this.rpcServer.simulateTransaction(tx);
 
     if ("errorResult" in simulation && simulation.errorResult) {
-      const errVal =
-        (simulation.errorResult as any).value?.() ?? simulation.errorResult;
+      const errVal = (simulation.errorResult as any).value?.() ?? simulation.errorResult;
       throw new Error(`Simulation failed: ${errVal.toString()}`);
     }
     if ("error" in simulation && (simulation as any).error) {
@@ -3973,11 +3931,8 @@ export class ContractService {
     // If there are address-type auth entries that need explicit signing, sign them
     const addressTypeEntries = authEntries.filter((e: any) => {
       try {
-        return (
-          e.credentials().switch().value !==
-          stellarXdr.SorobanCredentialsType.sorobanCredentialsSourceAccount()
-            .value
-        );
+        return e.credentials().switch().value !==
+          stellarXdr.SorobanCredentialsType.sorobanCredentialsSourceAccount().value;
       } catch {
         return false;
       }
@@ -3985,19 +3940,13 @@ export class ContractService {
 
     let finalPrepared = prepared;
     if (addressTypeEntries.length > 0) {
-      const signedAuthEntries = await signAuthEntries(
-        addressTypeEntries,
-        ownerAddress,
-      );
+      const signedAuthEntries = await signAuthEntries(addressTypeEntries, ownerAddress);
       const parsedSignedAuth = signedAuthEntries.map((s: string) =>
         stellarXdr.SorobanAuthorizationEntry.fromXDR(s, "base64"),
       );
 
       const operations = prepared.operations;
-      if (
-        operations.length > 0 &&
-        operations[0].type === "invokeHostFunction"
-      ) {
+      if (operations.length > 0 && operations[0].type === "invokeHostFunction") {
         const invokeOp = operations[0] as any;
         const hostFn = invokeOp.function || invokeOp.hostFunction;
         const newOp = Operation.invokeHostFunction({
@@ -4014,8 +3963,7 @@ export class ContractService {
         })
           .addOperation(newOp)
           .setSorobanData(
-            (prepared as any).getSorobanData?.() ??
-              (prepared as any).sorobanData,
+            (prepared as any).getSorobanData?.() ?? (prepared as any).sorobanData,
           )
           .setTimeout(30)
           .build() as any;
@@ -4027,10 +3975,7 @@ export class ContractService {
       address: ownerAddress,
     });
 
-    const signedTx = TransactionBuilder.fromXDR(
-      signedXdr,
-      this.network.networkPassphrase,
-    );
+    const signedTx = TransactionBuilder.fromXDR(signedXdr, this.network.networkPassphrase);
     const sendResponse = await this.rpcServer.sendTransaction(signedTx);
 
     if (sendResponse.status === "ERROR") {
@@ -4073,12 +4018,7 @@ export class ContractService {
         networkPassphrase: this.network.networkPassphrase,
       })
         .addOperation(
-          (contract as any).call(
-            "withdraw_stuck_funds",
-            tokenScVal,
-            toScVal,
-            amountScVal,
-          ),
+          (contract as any).call("withdraw_stuck_funds", tokenScVal, toScVal, amountScVal),
         )
         .setTimeout(30)
         .build();
@@ -4094,8 +4034,7 @@ export class ContractService {
         this.network.networkPassphrase,
       );
 
-      const sendResponse =
-        await this.rpcServer.sendTransaction(signedTransaction);
+      const sendResponse = await this.rpcServer.sendTransaction(signedTransaction);
       if (sendResponse.status === "ERROR") {
         throw new Error("Transaction failed");
       }
@@ -4131,8 +4070,8 @@ export class ContractService {
         .addOperation(
           contract.call(
             "is_authorized_arbiter",
-            nativeToScVal(arbiterAddress, { type: "address" }),
-          ),
+            nativeToScVal(arbiterAddress, { type: "address" })
+          )
         )
         .setTimeout(30)
         .build();
@@ -4162,12 +4101,13 @@ export class ContractService {
   private async sendTransactionWithAuth(
     assembledTx: any,
     walletAddress: string,
-    sourceAddress?: string,
+    sourceAddress?: string
   ): Promise<string> {
+
     // Simulate to check for errors and get auth entries
     const tx = TransactionBuilder.fromXDR(
       assembledTx.toXDR(),
-      this.network.networkPassphrase,
+      this.network.networkPassphrase
     );
 
     // If sourceAddress is provided, rebuild the transaction with that source account
@@ -4191,7 +4131,7 @@ export class ContractService {
     }
 
     const simulation = await this.rpcServer.simulateTransaction(
-      transactionToSimulate,
+      transactionToSimulate
     );
 
     // Check for auth entries
@@ -4202,18 +4142,19 @@ export class ContractService {
           : []
         : [];
 
+
     // Check if simulation failed
     if ("errorResult" in simulation && simulation.errorResult) {
       const errorValue =
         (simulation.errorResult as any).value?.() || simulation.errorResult;
       throw new Error(
-        `Transaction simulation failed: ${errorValue.toString()}`,
+        `Transaction simulation failed: ${errorValue.toString()}`
       );
     }
 
     // Prepare transaction
     const prepared = await this.rpcServer.prepareTransaction(
-      transactionToSimulate,
+      transactionToSimulate
     );
 
     // Sign auth entries if needed
@@ -4223,12 +4164,12 @@ export class ContractService {
       const authSignerAddress = sourceAddress || walletAddress;
       const signedAuthEntries = await signAuthEntries(
         authEntries as any[],
-        authSignerAddress,
+        authSignerAddress
       );
       // Rebuild transaction with signed auth entries
       const { xdr } = await import("@stellar/stellar-sdk");
       const parsedSignedAuth = signedAuthEntries.map((signed: string) =>
-        xdr.SorobanAuthorizationEntry.fromXDR(signed, "base64"),
+        xdr.SorobanAuthorizationEntry.fromXDR(signed, "base64")
       );
 
       const operations = prepared.operations;
@@ -4254,10 +4195,7 @@ export class ContractService {
             networkPassphrase: this.network.networkPassphrase,
           })
             .addOperation(newOp)
-            .setSorobanData(
-              (prepared as any).getSorobanData?.() ??
-                (prepared as any).sorobanData,
-            )
+            .setSorobanData((prepared as any).getSorobanData?.() ?? (prepared as any).sorobanData)
             .setTimeout(30)
             .build();
 
@@ -4268,7 +4206,7 @@ export class ContractService {
 
           const signedTransaction = TransactionBuilder.fromXDR(
             signedTxXdr,
-            this.network.networkPassphrase,
+            this.network.networkPassphrase
           );
 
           const sendResponse =
@@ -4297,7 +4235,7 @@ export class ContractService {
 
     const signedTransaction = TransactionBuilder.fromXDR(
       signedTxXdr,
-      this.network.networkPassphrase,
+      this.network.networkPassphrase
     );
 
     const sendResponse =
@@ -4361,6 +4299,518 @@ export class ContractService {
     }
 
     throw new Error("Transaction still pending after waiting");
+  }
+
+  // ─── Evidence ─────────────────────────────────────────────────────────────
+
+  /**
+   * Read all on-chain evidence entries for an escrow/milestone pair.
+   * Returns an array of { submitter, cid, submitted_at } objects.
+   */
+  async getEvidence(
+    escrowId: number,
+    milestoneIndex: number
+  ): Promise<Array<{ submitter: string; cid: string; submitted_at: number }>> {
+    this.syncFromConfig();
+    this.assertValidContractId();
+
+    const contract = new Contract(this.contractId);
+    const sourceAddress =
+      useWalletStore.getState().address ||
+      "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
+
+    const sourceAccount = {
+      accountId: () => sourceAddress,
+      sequenceNumber: () => "0",
+      incrementSequenceNumber: () => {},
+    } as any;
+
+    const tx = new TransactionBuilder(sourceAccount, {
+      fee: "100",
+      networkPassphrase: this.network.networkPassphrase,
+    })
+      .addOperation(
+        contract.call(
+          "get_evidence",
+          nativeToScVal(escrowId, { type: "u32" }),
+          nativeToScVal(milestoneIndex, { type: "u32" })
+        )
+      )
+      .setTimeout(30)
+      .build();
+
+    const simulation = await this.rpcServer.simulateTransaction(tx);
+
+    if ("errorResult" in simulation && simulation.errorResult) {
+      return [];
+    }
+
+    const result = (simulation as any).result?.retval;
+    if (!result) return [];
+
+    try {
+      const native = scValToNative(result);
+      if (!Array.isArray(native)) return [];
+      return native.map((entry: any) => ({
+        submitter: String(entry.submitter ?? ""),
+        cid: String(entry.cid ?? ""),
+        submitted_at: Number(entry.submitted_at ?? 0),
+      }));
+    } catch {
+      return [];
+    }
+  }
+
+  // ─── Emergency pause ─────────────────────────────────────────────────────────
+
+  async isContractPaused(): Promise<boolean> {
+    try {
+      const rv = await this.simulateReadonly("is_contract_paused");
+      return Boolean(scValToNative(rv));
+    } catch {
+      return false;
+    }
+  }
+
+  async pauseContract(address?: string): Promise<string> {
+    const walletAddress = address || useWalletStore.getState().address;
+    if (!walletAddress) throw new Error("Wallet not connected");
+    return this.sendOwnerTransaction("pause_contract", [], walletAddress);
+  }
+
+  async unpauseContract(address?: string): Promise<string> {
+    const walletAddress = address || useWalletStore.getState().address;
+    if (!walletAddress) throw new Error("Wallet not connected");
+    return this.sendOwnerTransaction("unpause_contract", [], walletAddress);
+  }
+
+  // ─── Token blacklist ──────────────────────────────────────────────────────────
+
+  async getBlacklistedTokens(): Promise<string[]> {
+    try {
+      const rv = await this.simulateReadonly("get_blacklisted_tokens");
+      const native = scValToNative(rv) as any;
+      if (!Array.isArray(native)) return [];
+      return native.map((a) => String(a));
+    } catch {
+      return [];
+    }
+  }
+
+  async isTokenBlacklisted(token: string): Promise<boolean> {
+    try {
+      const rv = await this.simulateReadonly("is_token_blacklisted", [
+        nativeToScVal(token, { type: "address" }),
+      ]);
+      return Boolean(scValToNative(rv));
+    } catch {
+      return false;
+    }
+  }
+
+  async blacklistToken(token: string, address?: string): Promise<string> {
+    const walletAddress = address || useWalletStore.getState().address;
+    if (!walletAddress) throw new Error("Wallet not connected");
+    return this.sendOwnerTransaction(
+      "blacklist_token",
+      [nativeToScVal(token, { type: "address" })],
+      walletAddress
+    );
+  }
+
+  async unblacklistToken(token: string, address?: string): Promise<string> {
+    const walletAddress = address || useWalletStore.getState().address;
+    if (!walletAddress) throw new Error("Wallet not connected");
+    return this.sendOwnerTransaction(
+      "unblacklist_token",
+      [nativeToScVal(token, { type: "address" })],
+      walletAddress
+    );
+  }
+
+  // ─── Fee withdrawal ───────────────────────────────────────────────────────────
+
+  async getWithdrawableFees(token?: string): Promise<string> {
+    try {
+      const tokenScVal = token
+        ? nativeToScVal(token, { type: "address" })
+        : xdr.ScVal.scvVoid();
+      const rv = await this.simulateReadonly("get_withdrawable_fees", [tokenScVal]);
+      const native = scValToNative(rv) as any;
+      return String(native ?? "0");
+    } catch {
+      return "0";
+    }
+  }
+
+  async withdrawFees(caller: string, token?: string): Promise<string> {
+    if (!caller) throw new Error("Wallet not connected");
+    const tokenScVal = token
+      ? nativeToScVal(token, { type: "address" })
+      : xdr.ScVal.scvVoid();
+    return this.sendOwnerTransaction(
+      "withdraw_fees",
+      [tokenScVal, nativeToScVal(caller, { type: "address" })],
+      caller
+    );
+  }
+
+  // ─── Paginated applications ───────────────────────────────────────────────────
+
+  async getApplicationsPage(
+    escrowId: number,
+    offset: number,
+    limit: number
+  ): Promise<Array<{ freelancer: string; cover_letter: string; proposed_timeline: number; applied_at: number }>> {
+    try {
+      const rv = await this.simulateReadonly("get_applications_page", [
+        nativeToScVal(escrowId, { type: "u32" }),
+        nativeToScVal(offset, { type: "u32" }),
+        nativeToScVal(limit, { type: "u32" }),
+      ]);
+      const native = scValToNative(rv) as any;
+      if (!Array.isArray(native)) return [];
+      return native.map((a: any) => ({
+        freelancer: String(a.freelancer ?? ""),
+        cover_letter: String(a.cover_letter ?? ""),
+        proposed_timeline: Number(a.proposed_timeline ?? 0),
+        applied_at: Number(a.applied_at ?? 0),
+      }));
+    } catch {
+      return [];
+    }
+  }
+
+  async getApplicationCount(escrowId: number): Promise<number> {
+    try {
+      const rv = await this.simulateReadonly("get_application_count", [
+        nativeToScVal(escrowId, { type: "u32" }),
+      ]);
+      return Number(scValToNative(rv) ?? 0);
+    } catch {
+      return 0;
+    }
+  }
+
+  // ─── Milestone management ─────────────────────────────────────────────────────
+
+  async addMilestone(
+    escrowId: number,
+    amount: string,
+    description: string,
+    depositor: string
+  ): Promise<string> {
+    if (!depositor) throw new Error("Wallet not connected");
+    return this.sendOwnerTransaction(
+      "add_milestone",
+      [
+        nativeToScVal(escrowId, { type: "u32" }),
+        nativeToScVal(BigInt(amount), { type: "i128" }),
+        nativeToScVal(description, { type: "string" }),
+        nativeToScVal(depositor, { type: "address" }),
+      ],
+      depositor
+    );
+  }
+
+  async removeMilestone(
+    escrowId: number,
+    milestoneIndex: number,
+    depositor: string
+  ): Promise<string> {
+    if (!depositor) throw new Error("Wallet not connected");
+    return this.sendOwnerTransaction(
+      "remove_milestone",
+      [
+        nativeToScVal(escrowId, { type: "u32" }),
+        nativeToScVal(milestoneIndex, { type: "u32" }),
+        nativeToScVal(depositor, { type: "address" }),
+      ],
+      depositor
+    );
+  }
+
+  /**
+   * Submit on-chain evidence for a disputed milestone.
+   * `submitter` must be the depositor, beneficiary, or an arbiter for the escrow.
+   * `cid` is an IPFS CID, optionally suffixed with `|description`.
+   */
+  async submitEvidence(
+    escrowId: number,
+    milestoneIndex: number,
+    submitter: string,
+    cid: string
+  ): Promise<string> {
+    if (!submitter) throw new Error("Wallet not connected");
+    if (!cid || cid.trim() === "") throw new Error("CID is required");
+
+    const contract = new Contract(this.contractId);
+    const sourceAccount = await this.rpcServer.getAccount(submitter);
+
+    const tx = new TransactionBuilder(sourceAccount, {
+      fee: "100",
+      networkPassphrase: this.network.networkPassphrase,
+    })
+      .addOperation(
+        contract.call(
+          "submit_evidence",
+          nativeToScVal(escrowId, { type: "u32" }),
+          nativeToScVal(milestoneIndex, { type: "u32" }),
+          nativeToScVal(submitter, { type: "address" }),
+          nativeToScVal(cid, { type: "string" })
+        )
+      )
+      .setTimeout(30)
+      .build();
+
+    const simulation = await this.rpcServer.simulateTransaction(tx);
+
+    if ("errorResult" in simulation && simulation.errorResult) {
+      const errVal =
+        (simulation.errorResult as any).value?.() ?? simulation.errorResult;
+      throw new Error(`Simulation failed: ${errVal.toString()}`);
+    }
+
+    const authEntries =
+      "auth" in simulation && Array.isArray((simulation as any).auth)
+        ? (simulation as any).auth
+        : [];
+
+    const prepared = await this.rpcServer.prepareTransaction(tx);
+
+    let finalTx: any = prepared;
+
+    if (authEntries.length > 0) {
+      const signedAuthEntries = await signAuthEntries(authEntries, submitter);
+      const parsedAuth = signedAuthEntries.map((s: string) =>
+        xdr.SorobanAuthorizationEntry.fromXDR(s, "base64")
+      );
+
+      const op = prepared.operations[0] as any;
+      const hostFn = op.function || op.hostFunction;
+      const newOp = Operation.invokeHostFunction({
+        function: hostFn as xdr.HostFunction,
+        auth: parsedAuth,
+      } as any);
+
+      const freshAccount = await this.rpcServer.getAccount(submitter);
+      finalTx = new TransactionBuilder(freshAccount, {
+        fee: prepared.fee,
+        networkPassphrase: this.network.networkPassphrase,
+      })
+        .addOperation(newOp)
+        .setSorobanData(
+          (prepared as any).getSorobanData?.() ?? (prepared as any).sorobanData
+        )
+        .setTimeout(30)
+        .build();
+    }
+
+    const signedXdr = await signTransaction({
+      unsignedTransaction: (finalTx as any).toXDR(),
+      address: submitter,
+    });
+
+    const signedTx = TransactionBuilder.fromXDR(
+      signedXdr,
+      this.network.networkPassphrase
+    );
+    const sendResponse = await this.rpcServer.sendTransaction(signedTx);
+
+    if (sendResponse.status === "ERROR") {
+      throw new Error(
+        `Transaction failed: ${
+          (sendResponse as any).errorResult?.toXDR("base64") ?? "unknown"
+        }`
+      );
+    }
+
+    return sendResponse.hash;
+  }
+
+  // ─── Job cancellation & fund management ──────────────────────────────────────
+
+  async cancelJob(escrowId: number, depositor: string): Promise<string> {
+    if (!depositor) throw new Error("Wallet not connected");
+    return this.sendOwnerTransaction(
+      "cancel_job",
+      [
+        nativeToScVal(escrowId, { type: "u32" }),
+        nativeToScVal(depositor, { type: "address" }),
+      ],
+      depositor
+    );
+  }
+
+  async addJobFunds(
+    escrowId: number,
+    depositor: string,
+    additionalAmount: string,
+    milestoneIndex: number
+  ): Promise<string> {
+    if (!depositor) throw new Error("Wallet not connected");
+    return this.sendOwnerTransaction(
+      "add_job_funds",
+      [
+        nativeToScVal(escrowId, { type: "u32" }),
+        nativeToScVal(depositor, { type: "address" }),
+        nativeToScVal(BigInt(additionalAmount), { type: "i128" }),
+        nativeToScVal(milestoneIndex, { type: "u32" }),
+      ],
+      depositor
+    );
+  }
+
+  async withdrawJobFunds(
+    escrowId: number,
+    depositor: string,
+    withdrawAmount: string,
+    milestoneIndex: number
+  ): Promise<string> {
+    if (!depositor) throw new Error("Wallet not connected");
+    return this.sendOwnerTransaction(
+      "withdraw_job_funds",
+      [
+        nativeToScVal(escrowId, { type: "u32" }),
+        nativeToScVal(depositor, { type: "address" }),
+        nativeToScVal(BigInt(withdrawAmount), { type: "i128" }),
+        nativeToScVal(milestoneIndex, { type: "u32" }),
+      ],
+      depositor
+    );
+  }
+
+  // ─── Milestone negotiation ────────────────────────────────────────────────────
+
+  async proposeMilestoneChange(
+    escrowId: number,
+    milestoneIndex: number,
+    proposedAmount: string,
+    proposedDescription: string | null,
+    freelancer: string
+  ): Promise<string> {
+    if (!freelancer) throw new Error("Wallet not connected");
+    const descScVal = proposedDescription
+      ? nativeToScVal(proposedDescription, { type: "string" })
+      : xdr.ScVal.scvVoid();
+    return this.sendOwnerTransaction(
+      "propose_milestone_change",
+      [
+        nativeToScVal(escrowId, { type: "u32" }),
+        nativeToScVal(milestoneIndex, { type: "u32" }),
+        nativeToScVal(BigInt(proposedAmount), { type: "i128" }),
+        descScVal,
+        nativeToScVal(freelancer, { type: "address" }),
+      ],
+      freelancer
+    );
+  }
+
+  async approveMilestoneProposal(
+    escrowId: number,
+    milestoneIndex: number,
+    depositor: string
+  ): Promise<string> {
+    if (!depositor) throw new Error("Wallet not connected");
+    return this.sendOwnerTransaction(
+      "approve_milestone_proposal",
+      [
+        nativeToScVal(escrowId, { type: "u32" }),
+        nativeToScVal(milestoneIndex, { type: "u32" }),
+        nativeToScVal(depositor, { type: "address" }),
+      ],
+      depositor
+    );
+  }
+
+  async rejectMilestoneProposal(
+    escrowId: number,
+    milestoneIndex: number,
+    depositor: string
+  ): Promise<string> {
+    if (!depositor) throw new Error("Wallet not connected");
+    return this.sendOwnerTransaction(
+      "reject_milestone_proposal",
+      [
+        nativeToScVal(escrowId, { type: "u32" }),
+        nativeToScVal(milestoneIndex, { type: "u32" }),
+        nativeToScVal(depositor, { type: "address" }),
+      ],
+      depositor
+    );
+  }
+
+  // ─── Per-milestone multi-sig dispute resolution ───────────────────────────────
+
+  async resolveDispute(
+    escrowId: number,
+    milestoneIndex: number,
+    arbiter: string,
+    freelancerAmount: string,
+    clientAmount: string,
+    reason: string
+  ): Promise<string> {
+    if (!arbiter) throw new Error("Wallet not connected");
+    return this.sendOwnerTransaction(
+      "resolve_dispute",
+      [
+        nativeToScVal(escrowId, { type: "u32" }),
+        nativeToScVal(milestoneIndex, { type: "u32" }),
+        nativeToScVal(arbiter, { type: "address" }),
+        nativeToScVal(BigInt(freelancerAmount), { type: "i128" }),
+        nativeToScVal(BigInt(clientAmount), { type: "i128" }),
+        nativeToScVal(reason, { type: "string" }),
+      ],
+      arbiter
+    );
+  }
+
+  // ─── Escrow deletion ──────────────────────────────────────────────────────────
+
+  async deleteEscrow(escrowId: number, ownerAddress?: string): Promise<string> {
+    const walletAddress = ownerAddress || useWalletStore.getState().address;
+    if (!walletAddress) throw new Error("Wallet not connected");
+    return this.sendOwnerTransaction(
+      "delete_escrow",
+      [nativeToScVal(escrowId, { type: "u32" })],
+      walletAddress
+    );
+  }
+
+  // ─── Dispute vote & cancellation views ───────────────────────────────────────
+
+  async getDisputeVoteCount(escrowId: number): Promise<number> {
+    try {
+      const rv = await this.simulateReadonly("get_dispute_vote_count", [
+        nativeToScVal(escrowId, { type: "u32" }),
+      ]);
+      return Number(scValToNative(rv) ?? 0);
+    } catch {
+      return 0;
+    }
+  }
+
+  async hasDisputeVoted(escrowId: number, arbiter: string): Promise<boolean> {
+    try {
+      const rv = await this.simulateReadonly("has_dispute_voted", [
+        nativeToScVal(escrowId, { type: "u32" }),
+        nativeToScVal(arbiter, { type: "address" }),
+      ]);
+      return Boolean(scValToNative(rv));
+    } catch {
+      return false;
+    }
+  }
+
+  async getUserCancellations(user: string): Promise<number> {
+    try {
+      const rv = await this.simulateReadonly("get_user_cancellations", [
+        nativeToScVal(user, { type: "address" }),
+      ]);
+      return Number(scValToNative(rv) ?? 0);
+    } catch {
+      return 0;
+    }
   }
 }
 

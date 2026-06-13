@@ -2,7 +2,7 @@ use crate::admin;
 use crate::storage_types::{
     DataKey, EscrowData, SecureFlowError, INSTANCE_BUMP_AMOUNT, INSTANCE_LIFETIME_THRESHOLD,
 };
-use soroban_sdk::{Address, Env, Vec, Error};
+use soroban_sdk::{token, Address, Env, String, Vec, Error};
 
 // Helper functions for escrow operations
 #[allow(dead_code)]
@@ -113,16 +113,74 @@ pub fn is_authorized_arbiter(env: &Env, arbiter: Address) -> bool {
         .unwrap_or(false)
     }
 
-pub fn is_whitelisted_token(env: &Env, token: Option<Address>) -> bool {
-    if token.is_none() {
-        return true; // Native XLM is always whitelisted
+/// Transfer tokens from this contract to `to`. No-op if amount <= 0.
+pub fn do_transfer(env: &Env, token_opt: &Option<Address>, to: &Address, amount: i128) {
+    if amount <= 0 {
+        return;
+    }
+    if let Some(token_addr) = token_opt {
+        token::Client::new(env, token_addr).transfer(&env.current_contract_address(), to, &amount);
+    } else {
+        let native = Address::from_string(&String::from_str(
+            env,
+            "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
+        ));
+        token::Client::new(env, &native).transfer(&env.current_contract_address(), to, &amount);
+    }
+}
+
+/// Transfer tokens from `from` into this contract. No-op if amount <= 0.
+pub fn transfer_in(env: &Env, token_opt: &Option<Address>, from: &Address, amount: i128) {
+    if amount <= 0 {
+        return;
+    }
+    if let Some(token_addr) = token_opt {
+        token::Client::new(env, token_addr).transfer(from, &env.current_contract_address(), &amount);
+    } else {
+        let native = Address::from_string(&String::from_str(
+            env,
+            "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
+        ));
+        token::Client::new(env, &native).transfer(from, &env.current_contract_address(), &amount);
+    }
+}
+
+/// Remove a single escrow ID from a user's escrow list.
+pub fn remove_user_escrow(env: &Env, user: Address, escrow_id: u32) {
+    let list: Vec<u32> = env
+        .storage()
+        .instance()
+        .get(&DataKey::UserEscrows(user.clone()))
+        .unwrap_or(Vec::new(env));
+    let mut new_list: Vec<u32> = Vec::new(env);
+    for id in list.iter() {
+        if id != escrow_id {
+            new_list.push_back(id);
+        }
     }
     env.storage()
         .instance()
         .extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
     env.storage()
         .instance()
-        .get(&DataKey::WhitelistedToken(token.unwrap()))
+        .set(&DataKey::UserEscrows(user), &new_list);
+}
+
+pub fn is_whitelisted_token(env: &Env, token: Option<Address>) -> bool {
+    if token.is_none() {
+        return true; // Native XLM is always whitelisted
+    }
+    let addr = token.unwrap();
+    // Reject if blacklisted even if previously whitelisted
+    if admin::is_blacklisted_token(env, &addr) {
+        return false;
+    }
+    env.storage()
+        .instance()
+        .extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
+    env.storage()
+        .instance()
+        .get(&DataKey::WhitelistedToken(addr))
         .unwrap_or(false)
 }
 

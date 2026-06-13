@@ -3,6 +3,7 @@
 mod admin;
 mod escrow_core;
 mod escrow_management;
+mod evidence;
 mod marketplace;
 mod ratings;
 mod refund_system;
@@ -373,5 +374,226 @@ impl SecureFlow {
     }
 
     // (moved earlier) is_authorized_arbiter is defined above with other admin views
+
+    /// Submit evidence for a disputed milestone (stored on-chain in Soroban).
+    /// `submitter` must be the depositor, beneficiary, or an arbiter for the escrow.
+    /// `cid` is the IPFS CID (optionally suffixed with `|description`).
+    pub fn submit_evidence(
+        env: Env,
+        escrow_id: u32,
+        milestone_index: u32,
+        submitter: Address,
+        cid: String,
+    ) -> Result<(), Error> {
+        evidence::submit_evidence(&env, escrow_id, milestone_index, submitter, cid)
+    }
+
+    /// Get all evidence entries for a specific escrow milestone.
+    pub fn get_evidence(env: Env, escrow_id: u32, milestone_index: u32) -> Vec<EvidenceEntry> {
+        evidence::get_evidence(&env, escrow_id, milestone_index)
+    }
+
+    // ─── Emergency pause ─────────────────────────────────────────────────────
+
+    /// Owner-only: pause ALL contract write operations (emergency).
+    pub fn pause_contract(env: Env) -> Result<(), Error> {
+        admin::pause_contract(&env)
+    }
+
+    /// Owner-only: lift the emergency pause.
+    pub fn unpause_contract(env: Env) -> Result<(), Error> {
+        admin::unpause_contract(&env)
+    }
+
+    /// Returns true when the contract is in emergency-paused state.
+    pub fn is_contract_paused(env: Env) -> bool {
+        admin::is_contract_paused(&env)
+    }
+
+    // ─── Token blacklist ──────────────────────────────────────────────────────
+
+    /// Owner-only: blacklist a token so it can no longer be used for new escrows.
+    pub fn blacklist_token(env: Env, token: Address) -> Result<(), Error> {
+        admin::blacklist_token(&env, token)
+    }
+
+    /// Owner-only: remove a token from the blacklist.
+    pub fn unblacklist_token(env: Env, token: Address) -> Result<(), Error> {
+        admin::unblacklist_token(&env, token)
+    }
+
+    /// Returns true when the given token is blacklisted.
+    pub fn is_token_blacklisted(env: Env, token: Address) -> bool {
+        admin::is_blacklisted_token(&env, &token)
+    }
+
+    /// Return the list of all blacklisted tokens.
+    pub fn get_blacklisted_tokens(env: Env) -> Vec<Address> {
+        admin::get_blacklisted_tokens(&env)
+    }
+
+    // ─── Fee withdrawal ───────────────────────────────────────────────────────
+
+    /// Return the accumulated (unclaimed) platform fees for a given token.
+    /// Pass `None` for native XLM fees.
+    pub fn get_withdrawable_fees(env: Env, token: Option<Address>) -> i128 {
+        admin::get_withdrawable_fees(&env, token)
+    }
+
+    /// Fee collector: withdraw all accumulated platform fees for a given token.
+    pub fn withdraw_fees(env: Env, token: Option<Address>, caller: Address) -> Result<(), Error> {
+        admin::withdraw_fees(&env, token, caller)
+    }
+
+    // ─── Paginated applications ───────────────────────────────────────────────
+
+    /// Get a page of applications for an escrow (zero-based offset).
+    pub fn get_applications_page(env: Env, escrow_id: u32, offset: u32, limit: u32) -> Vec<Application> {
+        marketplace::get_applications_page(&env, escrow_id, offset, limit)
+    }
+
+    /// Return the total number of applications for an escrow.
+    pub fn get_application_count(env: Env, escrow_id: u32) -> u32 {
+        marketplace::get_application_count(&env, escrow_id)
+    }
+
+    // ─── Milestone management ─────────────────────────────────────────────────
+
+    /// Add a new milestone to a Pending escrow (only before work starts).
+    pub fn add_milestone(
+        env: Env,
+        escrow_id: u32,
+        amount: i128,
+        description: String,
+        depositor: Address,
+    ) -> Result<(), Error> {
+        escrow_management::add_milestone(&env, escrow_id, amount, description, depositor)
+    }
+
+    /// Remove a milestone from a Pending escrow by index (only before work starts).
+    pub fn remove_milestone(
+        env: Env,
+        escrow_id: u32,
+        milestone_index: u32,
+        depositor: Address,
+    ) -> Result<(), Error> {
+        escrow_management::remove_milestone(&env, escrow_id, milestone_index, depositor)
+    }
+
+    // ─── Job cancellation ─────────────────────────────────────────────────────
+
+    /// Depositor cancels an open (unassigned) job and receives a tiered refund.
+    pub fn cancel_job(env: Env, escrow_id: u32, depositor: Address) -> Result<(), Error> {
+        escrow_management::cancel_job(&env, escrow_id, depositor)
+    }
+
+    // ─── Dynamic fund management ──────────────────────────────────────────────
+
+    /// Add funds to a specific milestone on an open job (before freelancer assigned).
+    pub fn add_job_funds(
+        env: Env,
+        escrow_id: u32,
+        depositor: Address,
+        additional_amount: i128,
+        milestone_index: u32,
+    ) -> Result<(), Error> {
+        escrow_management::add_job_funds(&env, escrow_id, depositor, additional_amount, milestone_index)
+    }
+
+    /// Withdraw funds from a specific milestone on an open job (before freelancer assigned).
+    pub fn withdraw_job_funds(
+        env: Env,
+        escrow_id: u32,
+        depositor: Address,
+        withdraw_amount: i128,
+        milestone_index: u32,
+    ) -> Result<(), Error> {
+        escrow_management::withdraw_job_funds(&env, escrow_id, depositor, withdraw_amount, milestone_index)
+    }
+
+    // ─── Milestone negotiation ────────────────────────────────────────────────
+
+    /// Freelancer proposes a change to a milestone's amount and/or description.
+    pub fn propose_milestone_change(
+        env: Env,
+        escrow_id: u32,
+        milestone_index: u32,
+        proposed_amount: i128,
+        proposed_description: String,
+        freelancer: Address,
+    ) -> Result<(), Error> {
+        work_lifecycle::propose_milestone_change(
+            &env, escrow_id, milestone_index, proposed_amount, proposed_description, freelancer,
+        )
+    }
+
+    /// Client approves the freelancer's milestone change proposal.
+    pub fn approve_milestone_proposal(
+        env: Env,
+        escrow_id: u32,
+        milestone_index: u32,
+        depositor: Address,
+    ) -> Result<(), Error> {
+        work_lifecycle::approve_milestone_proposal(&env, escrow_id, milestone_index, depositor)
+    }
+
+    /// Client rejects the freelancer's milestone change proposal.
+    pub fn reject_milestone_proposal(
+        env: Env,
+        escrow_id: u32,
+        milestone_index: u32,
+        depositor: Address,
+    ) -> Result<(), Error> {
+        work_lifecycle::reject_milestone_proposal(&env, escrow_id, milestone_index, depositor)
+    }
+
+    // ─── Per-milestone multi-sig dispute resolution ───────────────────────────
+
+    /// Authorized arbiter casts a vote to resolve a disputed milestone.
+    /// Executes when `required_confirmations` votes have been cast.
+    pub fn resolve_dispute(
+        env: Env,
+        escrow_id: u32,
+        milestone_index: u32,
+        arbiter: Address,
+        freelancer_amount: i128,
+        client_amount: i128,
+        reason: String,
+    ) -> Result<(), Error> {
+        work_lifecycle::resolve_dispute(
+            &env, escrow_id, milestone_index, arbiter, freelancer_amount, client_amount, reason,
+        )
+    }
+
+    // ─── Escrow admin ─────────────────────────────────────────────────────────
+
+    /// Owner-only: permanently delete a terminal escrow with no remaining funds.
+    pub fn delete_escrow(env: Env, escrow_id: u32) -> Result<(), Error> {
+        admin::delete_escrow(&env, escrow_id)
+    }
+
+    /// Get the number of dispute votes cast for an escrow.
+    pub fn get_dispute_vote_count(env: Env, escrow_id: u32) -> u32 {
+        env.storage()
+            .instance()
+            .get(&DataKey::DisputeVoteCount(escrow_id))
+            .unwrap_or(0)
+    }
+
+    /// Check whether a specific arbiter has already voted on an escrow's dispute.
+    pub fn has_dispute_voted(env: Env, escrow_id: u32, arbiter: Address) -> bool {
+        env.storage()
+            .instance()
+            .get(&DataKey::DisputeVote(escrow_id, arbiter))
+            .unwrap_or(false)
+    }
+
+    /// Get the user's lifetime cancellation count.
+    pub fn get_user_cancellations(env: Env, user: Address) -> u32 {
+        env.storage()
+            .instance()
+            .get(&DataKey::UserCancellations(user))
+            .unwrap_or(0)
+    }
 }
 

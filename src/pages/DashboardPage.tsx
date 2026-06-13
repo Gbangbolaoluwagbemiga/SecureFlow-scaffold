@@ -38,7 +38,7 @@ import { Button } from "@/components/ui/button";
 import { RefreshCw } from "lucide-react";
 
 export default function DashboardPage() {
-  const { wallet, getContract } = useWeb3();
+  const { wallet, getContract, refreshBalance } = useWeb3();
   const { toast } = useToast();
   const { addNotification } = useNotifications();
   const [escrows, setEscrows] = useState<Escrow[]>([]);
@@ -783,17 +783,11 @@ export default function DashboardPage() {
         );
       }
 
+      // Refresh balance to reflect XLM released from escrow
+      refreshBalance().catch(() => {});
+
       // Wait a moment for blockchain state to update
       await new Promise((resolve) => setTimeout(resolve, 3000));
-
-      // Add debugging for payment tracking
-      // const milestone = escrow.milestones[milestoneIndex]; // Unused
-
-      // Check if milestone amount is being parsed correctly
-      // const milestoneAmountInTokens = Number.parseFloat(milestone.amount) / 1e7; // Unused
-
-      // Wait a moment for blockchain state to update
-      await new Promise((resolve) => setTimeout(resolve, 2000));
 
       // Refresh the escrow data without reloading the page
       // Use manual refresh flag to prevent showing loading screen

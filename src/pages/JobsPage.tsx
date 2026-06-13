@@ -540,6 +540,9 @@ export default function JobsPage() {
           jobs={jobs}
           openJobsCount={totalEscrowsCount}
           ongoingProjectsCount={ongoingProjectsCount}
+          isClientUser={jobs.some(
+            (j) => (j as any).payer?.toLowerCase() === wallet.address?.toLowerCase()
+          )}
         />
 
         {/* Filters */}
