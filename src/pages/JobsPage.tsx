@@ -538,7 +538,7 @@ export default function JobsPage() {
         )}
         <JobsStats
           jobs={jobs}
-          openJobsCount={totalEscrowsCount}
+          openJobsCount={jobs.length}
           ongoingProjectsCount={ongoingProjectsCount}
           isClientUser={jobs.some(
             (j) => (j as any).payer?.toLowerCase() === wallet.address?.toLowerCase()

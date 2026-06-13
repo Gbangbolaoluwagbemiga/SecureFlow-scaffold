@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { motion } from "framer-motion";
-import { Clock, DollarSign, Calendar, Play, Send, Star } from "lucide-react";
+import { Clock, DollarSign, Calendar, Play, Send, Star, Loader2 } from "lucide-react";
 import { ClientRatingDialog } from "@/components/rating/client-rating-dialog";
 import { ContractService } from "@/lib/web3/contract-service";
 import { CONTRACTS } from "@/lib/web3/config";
@@ -35,7 +35,7 @@ interface Escrow {
 interface EscrowCardProps {
   escrow: Escrow;
   index: number;
-  onStartWork: (escrowId: string) => void;
+  onStartWork: (escrowId: string) => void | Promise<void>;
   onSubmitMilestone: (escrowId: string, milestoneIndex: number) => void;
   onDispute: (escrowId: string) => void;
 }
@@ -49,6 +49,7 @@ export function EscrowCard({
 }: EscrowCardProps) {
   const [ratingDialogOpen, setRatingDialogOpen] = useState(false);
   const [hasClientRating, setHasClientRating] = useState(false);
+  const [isStarting, setIsStarting] = useState(false);
 
   const isCompleted =
     escrow.status === "completed" ||
@@ -218,11 +219,28 @@ export function EscrowCard({
             <div className="flex gap-2">
               {escrow.status === "pending" && (
                 <Button
-                  onClick={() => onStartWork(escrow.id)}
+                  onClick={async () => {
+                    setIsStarting(true);
+                    try {
+                      await onStartWork(escrow.id);
+                    } finally {
+                      setIsStarting(false);
+                    }
+                  }}
+                  disabled={isStarting}
                   className="flex-1 cursor-pointer"
                 >
-                  <Play className="h-4 w-4 mr-1" />
-                  Start Work
+                  {isStarting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                      Starting…
+                    </>
+                  ) : (
+                    <>
+                      <Play className="h-4 w-4 mr-1" />
+                      Start Work
+                    </>
+                  )}
                 </Button>
               )}
               {escrow.status === "active" && (

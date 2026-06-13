@@ -44,7 +44,7 @@ export function JobsStats({
       <Card className="glass border-primary/20 p-4 md:p-6">
         <div className="flex items-center justify-between">
           <div className="min-w-0 flex-1">
-            <p className="text-sm text-muted-foreground mb-1">Total Escrows</p>
+            <p className="text-sm text-muted-foreground mb-1">Available Jobs</p>
             <p className="text-2xl md:text-3xl font-bold break-all">
               {openJobsCount !== undefined ? openJobsCount : jobs.length}
             </p>
