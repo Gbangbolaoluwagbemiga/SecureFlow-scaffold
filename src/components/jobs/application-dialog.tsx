@@ -12,7 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import type { Escrow } from "@/lib/web3/types";
-import { Sparkles, Paperclip, X, CheckCircle2 } from "lucide-react";
+import { Sparkles, Paperclip, X, CheckCircle2, Layers } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
   isApiConfigured,
@@ -20,6 +20,13 @@ import {
   uploadMilestoneFile,
   type UploadedFile,
 } from "@/lib/api";
+import { CONTRACTS } from "@/lib/web3/config";
+
+interface MilestonePreview {
+  description: string;
+  requirements: string;
+  amount: string;
+}
 
 interface ApplicationDialogProps {
   job: Escrow | null;
@@ -48,6 +55,8 @@ export function ApplicationDialog({
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadedFile, setUploadedFile] = useState<UploadedFile | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [milestones, setMilestones] = useState<MilestonePreview[] | null>(null);
+  const [milestonesLoading, setMilestonesLoading] = useState(false);
 
   // Keep user input until the dialog actually closes (e.g. after a successful tx).
   useEffect(() => {
@@ -56,8 +65,35 @@ export function ApplicationDialog({
       setProposedTimeline("");
       setSelectedFile(null);
       setUploadedFile(null);
+      setMilestones(null);
     }
   }, [open]);
+
+  // Fetch on-chain milestones when dialog opens so applicants see the breakdown
+  useEffect(() => {
+    if (!open || !job) return;
+    let cancelled = false;
+    (async () => {
+      setMilestonesLoading(true);
+      try {
+        const { ContractService } = await import("@/lib/web3/contract-service");
+        const svc = new ContractService(CONTRACTS.SECUREFLOW_ESCROW);
+        const raw = await svc.getMilestones(Number(job.id));
+        if (cancelled) return;
+        const parsed: MilestonePreview[] = (raw as any[]).map((m: any) => ({
+          description: m.description ?? "",
+          requirements: m.requirements ?? "",
+          amount: m.amount?.toString() ?? "0",
+        }));
+        setMilestones(parsed);
+      } catch {
+        if (!cancelled) setMilestones([]);
+      } finally {
+        if (!cancelled) setMilestonesLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [open, job]);
 
   const hasUserText = coverLetter.trim().length > 10;
 
@@ -162,6 +198,47 @@ export function ApplicationDialog({
         </DialogHeader>
 
         <div className="space-y-4 py-4">
+          {/* Milestone breakdown — count + per-milestone amount + description */}
+          <div>
+            <Label className="mb-1.5 flex items-center gap-1.5">
+              <Layers className="h-3.5 w-3.5" />
+              Milestones
+              {milestones && (
+                <span className="font-normal text-muted-foreground">({milestones.length})</span>
+              )}
+            </Label>
+            {milestonesLoading ? (
+              <div className="text-sm text-muted-foreground px-3 py-2 rounded-md border border-dashed">
+                Loading milestones…
+              </div>
+            ) : milestones && milestones.length > 0 ? (
+              <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
+                {milestones.map((m, i) => (
+                  <div
+                    key={i}
+                    className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-1 sm:gap-3 px-3 py-2 rounded-md border bg-muted/30"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-medium text-muted-foreground">Milestone {i + 1}</div>
+                      {(m.requirements || m.description) && (
+                        <div className="text-sm whitespace-pre-wrap wrap-break-word">
+                          {m.requirements || m.description}
+                        </div>
+                      )}
+                    </div>
+                    <div className="text-sm font-semibold text-green-600 dark:text-green-400 whitespace-nowrap sm:self-start">
+                      {(Number(m.amount) / 1e7).toFixed(2)} XLM
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : milestones !== null ? (
+              <div className="text-sm text-muted-foreground px-3 py-2 rounded-md border border-dashed">
+                No milestones defined for this job.
+              </div>
+            ) : null}
+          </div>
+
           <div>
             <div className="flex items-center justify-between gap-2 mb-2">
               <Label htmlFor="coverLetter">Cover Letter *</Label>

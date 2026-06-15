@@ -10,7 +10,7 @@ use soroban_sdk::{token, Address, Env, String, Vec, Error};
 const DISPUTE_PERIOD: u32 = 604800; // 7 days in seconds
 const REPUTATION_PER_MILESTONE: u32 = 10;
 const REPUTATION_PER_ESCROW: u32 = 25;
-const MIN_REP_ELIGIBLE_ESCROW_VALUE: i128 = 10000000000000000; // 0.01 in stroops
+const MIN_REP_ELIGIBLE_ESCROW_VALUE: i128 = 1_000_000; // 0.1 tokens (7 decimal places)
 
 pub fn start_work(env: &Env, escrow_id: u32, beneficiary: Address) -> Result<(), Error> {
     beneficiary.require_auth();
