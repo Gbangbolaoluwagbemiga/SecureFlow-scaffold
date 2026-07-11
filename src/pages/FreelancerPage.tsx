@@ -227,7 +227,10 @@ export default function FreelancerPage() {
   const [disputeReason, setDisputeReason] = useState("");
   const [resubmitDescription, setResubmitDescription] = useState("");
   const [resubmitFile, setResubmitFile] = useState<File | null>(null);
-  const [resubmitAttachment, setResubmitAttachment] = useState<{ url: string; filename: string } | null>(null);
+  const [resubmitAttachment, setResubmitAttachment] = useState<{
+    url: string;
+    filename: string;
+  } | null>(null);
   const [resubmitUploading, setResubmitUploading] = useState(false);
   const [showResubmitDialog, setShowResubmitDialog] = useState(false);
   const [selectedResubmitEscrow, setSelectedResubmitEscrow] = useState<
@@ -485,9 +488,12 @@ export default function FreelancerPage() {
                   approvedAt,
                   disputeReason: m.dispute_reason || undefined,
                   rejectionReason: m.rejection_reason || undefined,
-                  resolutionAmount: m.resolution_freelancer_amount?.toString() || undefined,
-                  resolutionFreelancerAmount: m.resolution_freelancer_amount?.toString() || undefined,
-                  resolutionClientAmount: m.resolution_client_amount?.toString() || undefined,
+                  resolutionAmount:
+                    m.resolution_freelancer_amount?.toString() || undefined,
+                  resolutionFreelancerAmount:
+                    m.resolution_freelancer_amount?.toString() || undefined,
+                  resolutionClientAmount:
+                    m.resolution_client_amount?.toString() || undefined,
                   resolutionReason: m.resolution_reason || undefined,
                 };
               },
@@ -1006,12 +1012,23 @@ export default function FreelancerPage() {
       if (resubmitFile && isApiConfigured() && !localAttachment) {
         try {
           setResubmitUploading(true);
-          toast({ title: "Uploading attachment…", description: resubmitFile.name });
-          const uploaded: UploadedFile = await uploadMilestoneFile(resubmitFile, escrowId, Number(milestoneIndex));
+          toast({
+            title: "Uploading attachment…",
+            description: resubmitFile.name,
+          });
+          const uploaded: UploadedFile = await uploadMilestoneFile(
+            resubmitFile,
+            escrowId,
+            Number(milestoneIndex),
+          );
           localAttachment = { url: uploaded.url, filename: uploaded.filename };
           setResubmitAttachment(localAttachment);
         } catch (uploadErr: any) {
-          toast({ title: "File upload failed", description: uploadErr.message || "Could not upload attachment", variant: "destructive" });
+          toast({
+            title: "File upload failed",
+            description: uploadErr.message || "Could not upload attachment",
+            variant: "destructive",
+          });
           return;
         } finally {
           setResubmitUploading(false);
@@ -1047,7 +1064,8 @@ export default function FreelancerPage() {
 
       addNotification(
         createMilestoneNotification("submitted", escrowId, milestoneIndex, {
-          freelancerName: wallet.address!.slice(0, 6) + "..." + wallet.address!.slice(-4),
+          freelancerName:
+            wallet.address!.slice(0, 6) + "..." + wallet.address!.slice(-4),
           projectTitle: escrow?.projectTitle || `Project #${escrowId}`,
         }),
         clientAddress ? [clientAddress] : undefined,
@@ -1773,26 +1791,58 @@ export default function FreelancerPage() {
 
                                     {/* Client Requirements */}
                                     {(() => {
-                                      const req = (milestone as any).requirements as string | undefined;
-                                      const reqText = req && req !== `Milestone ${index + 1}` && !req.includes("To be defined") ? req : "";
-                                      const isSubmitted = ["submitted","approved","rejected","disputed","resolved"].includes(milestone.status);
-                                      const submissionText = isSubmitted ? milestone.description : "";
-                                      const displayReq = reqText || (!isSubmitted ? milestone.description : "");
+                                      const req = (milestone as any)
+                                        .requirements as string | undefined;
+                                      const reqText =
+                                        req &&
+                                        req !== `Milestone ${index + 1}` &&
+                                        !req.includes("To be defined")
+                                          ? req
+                                          : "";
+                                      const isSubmitted = [
+                                        "submitted",
+                                        "approved",
+                                        "rejected",
+                                        "disputed",
+                                        "resolved",
+                                      ].includes(milestone.status);
+                                      const submissionText = isSubmitted
+                                        ? milestone.description
+                                        : "";
+                                      const displayReq =
+                                        reqText ||
+                                        (!isSubmitted
+                                          ? milestone.description
+                                          : "");
                                       return (
                                         <>
                                           {displayReq && (
                                             <div className="text-xs text-gray-600 dark:text-gray-400 mb-2">
-                                              <span className="font-medium">Requirements:</span>
+                                              <span className="font-medium">
+                                                Requirements:
+                                              </span>
                                               <p className="mt-1 line-clamp-2">
-                                                {displayReq.length > 80 ? displayReq.substring(0, 80) + "..." : displayReq}
+                                                {displayReq.length > 80
+                                                  ? displayReq.substring(
+                                                      0,
+                                                      80,
+                                                    ) + "..."
+                                                  : displayReq}
                                               </p>
                                             </div>
                                           )}
                                           {submissionText && (
                                             <div className="text-xs text-emerald-700 dark:text-emerald-400 mb-2">
-                                              <span className="font-medium">Your Submission:</span>
+                                              <span className="font-medium">
+                                                Your Submission:
+                                              </span>
                                               <p className="mt-1 line-clamp-2">
-                                                {submissionText.length > 80 ? submissionText.substring(0, 80) + "..." : submissionText}
+                                                {submissionText.length > 80
+                                                  ? submissionText.substring(
+                                                      0,
+                                                      80,
+                                                    ) + "..."
+                                                  : submissionText}
                                               </p>
                                             </div>
                                           )}
@@ -1853,47 +1903,87 @@ export default function FreelancerPage() {
                                     )}
 
                                     {/* Resolved milestone — show outcome and evidence */}
-                                    {milestone.status === "resolved" && (() => {
-                                      const freelancerAmt = Number((milestone as any).resolutionFreelancerAmount || milestone.resolutionAmount || "0");
-                                      const clientAmt = Number((milestone as any).resolutionClientAmount || "0");
-                                      const totalAmt = Number(milestone.amount || "0");
-                                      const reason = (milestone as any).resolutionReason as string | undefined;
-                                      return (
-                                        <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800 space-y-2">
-                                          <div className="flex items-center gap-2">
-                                            <span className="text-xs font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-300">Dispute Resolved</span>
-                                          </div>
-                                          {freelancerAmt > 0 || clientAmt > 0 ? (
-                                            <div className="grid grid-cols-2 gap-2">
-                                              <div className="p-2 rounded bg-green-100 dark:bg-green-900/30 text-center">
-                                                <p className="text-xs text-green-700 dark:text-green-400 font-medium">You received</p>
-                                                <p className="text-sm font-bold text-green-800 dark:text-green-300">{(freelancerAmt / 1e7).toFixed(2)} tokens</p>
-                                              </div>
-                                              <div className="p-2 rounded bg-orange-100 dark:bg-orange-900/30 text-center">
-                                                <p className="text-xs text-orange-700 dark:text-orange-400 font-medium">Client refunded</p>
-                                                <p className="text-sm font-bold text-orange-800 dark:text-orange-300">{(clientAmt / 1e7).toFixed(2)} tokens</p>
-                                              </div>
+                                    {milestone.status === "resolved" &&
+                                      (() => {
+                                        const freelancerAmt = Number(
+                                          (milestone as any)
+                                            .resolutionFreelancerAmount ||
+                                            milestone.resolutionAmount ||
+                                            "0",
+                                        );
+                                        const clientAmt = Number(
+                                          (milestone as any)
+                                            .resolutionClientAmount || "0",
+                                        );
+                                        const totalAmt = Number(
+                                          milestone.amount || "0",
+                                        );
+                                        const reason = (milestone as any)
+                                          .resolutionReason as
+                                          | string
+                                          | undefined;
+                                        return (
+                                          <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800 space-y-2">
+                                            <div className="flex items-center gap-2">
+                                              <span className="text-xs font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-300">
+                                                Dispute Resolved
+                                              </span>
                                             </div>
-                                          ) : totalAmt > 0 ? (
-                                            <p className="text-sm text-blue-700 dark:text-blue-300">Dispute resolved — outcome recorded on-chain</p>
-                                          ) : null}
-                                          {reason && (
-                                            <div className="p-2 rounded bg-blue-100 dark:bg-blue-800/30 border border-blue-200 dark:border-blue-700">
-                                              <p className="text-xs font-medium text-blue-800 dark:text-blue-200 mb-0.5">Arbiter's reasoning:</p>
-                                              <p className="text-sm text-blue-700 dark:text-blue-300">{reason}</p>
+                                            {freelancerAmt > 0 ||
+                                            clientAmt > 0 ? (
+                                              <div className="grid grid-cols-2 gap-2">
+                                                <div className="p-2 rounded bg-green-100 dark:bg-green-900/30 text-center">
+                                                  <p className="text-xs text-green-700 dark:text-green-400 font-medium">
+                                                    You received
+                                                  </p>
+                                                  <p className="text-sm font-bold text-green-800 dark:text-green-300">
+                                                    {(
+                                                      freelancerAmt / 1e7
+                                                    ).toFixed(2)}{" "}
+                                                    tokens
+                                                  </p>
+                                                </div>
+                                                <div className="p-2 rounded bg-orange-100 dark:bg-orange-900/30 text-center">
+                                                  <p className="text-xs text-orange-700 dark:text-orange-400 font-medium">
+                                                    Client refunded
+                                                  </p>
+                                                  <p className="text-sm font-bold text-orange-800 dark:text-orange-300">
+                                                    {(clientAmt / 1e7).toFixed(
+                                                      2,
+                                                    )}{" "}
+                                                    tokens
+                                                  </p>
+                                                </div>
+                                              </div>
+                                            ) : totalAmt > 0 ? (
+                                              <p className="text-sm text-blue-700 dark:text-blue-300">
+                                                Dispute resolved — outcome
+                                                recorded on-chain
+                                              </p>
+                                            ) : null}
+                                            {reason && (
+                                              <div className="p-2 rounded bg-blue-100 dark:bg-blue-800/30 border border-blue-200 dark:border-blue-700">
+                                                <p className="text-xs font-medium text-blue-800 dark:text-blue-200 mb-0.5">
+                                                  Arbiter's reasoning:
+                                                </p>
+                                                <p className="text-sm text-blue-700 dark:text-blue-300">
+                                                  {reason}
+                                                </p>
+                                              </div>
+                                            )}
+                                            <div className="flex gap-2 flex-wrap pt-1">
+                                              <ViewEvidenceButton
+                                                escrowId={String(escrow.id)}
+                                                milestoneIndex={index}
+                                                clientAddress={escrow.payer}
+                                                freelancerAddress={
+                                                  escrow.beneficiary
+                                                }
+                                              />
                                             </div>
-                                          )}
-                                          <div className="flex gap-2 flex-wrap pt-1">
-                                            <ViewEvidenceButton
-                                              escrowId={String(escrow.id)}
-                                              milestoneIndex={index}
-                                              clientAddress={escrow.payer}
-                                              freelancerAddress={escrow.beneficiary}
-                                            />
                                           </div>
-                                        </div>
-                                      );
-                                    })()}
+                                        );
+                                      })()}
 
                                     {/* Show disputed status if milestone is disputed */}
                                     {milestone.status === "disputed" && (
@@ -1927,7 +2017,9 @@ export default function FreelancerPage() {
                                             escrowId={String(escrow.id)}
                                             milestoneIndex={index}
                                             clientAddress={escrow.payer}
-                                            freelancerAddress={escrow.beneficiary}
+                                            freelancerAddress={
+                                              escrow.beneficiary
+                                            }
                                           />
                                         </div>
                                       </div>
@@ -2075,9 +2167,19 @@ export default function FreelancerPage() {
 
                                   {/* Client Requirements */}
                                   {(() => {
-                                    const req = (currentMilestone as any).requirements as string | undefined;
-                                    const reqText = req && !req.includes("To be defined") && req !== `Milestone ${currentMilestoneIndex + 1}` ? req : currentMilestone.description;
-                                    return reqText && !reqText.includes("To be defined") && reqText !== `Milestone ${currentMilestoneIndex + 1}` ? (
+                                    const req = (currentMilestone as any)
+                                      .requirements as string | undefined;
+                                    const reqText =
+                                      req &&
+                                      !req.includes("To be defined") &&
+                                      req !==
+                                        `Milestone ${currentMilestoneIndex + 1}`
+                                        ? req
+                                        : currentMilestone.description;
+                                    return reqText &&
+                                      !reqText.includes("To be defined") &&
+                                      reqText !==
+                                        `Milestone ${currentMilestoneIndex + 1}` ? (
                                       <div className="mb-3 p-3 bg-white dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700">
                                         <div className="text-sm font-medium text-blue-800 dark:text-blue-200 mb-1">
                                           Client Requirements:
@@ -2429,27 +2531,58 @@ export default function FreelancerPage() {
                       rows={3}
                     />
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                      This message will be sent to the client along with your resubmission.
+                      This message will be sent to the client along with your
+                      resubmission.
                     </p>
                   </div>
                   {isApiConfigured() && (
                     <div>
                       <label className="block text-sm font-medium mb-1.5">
-                        Attach File <span className="font-normal text-gray-400">(optional · PDF, images, docs · max 10 MB)</span>
+                        Attach File{" "}
+                        <span className="font-normal text-gray-400">
+                          (optional · PDF, images, docs · max 10 MB)
+                        </span>
                       </label>
                       {resubmitAttachment ? (
                         <div className="flex items-center gap-2 p-2 rounded bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 text-sm">
-                          <span className="truncate text-green-700 dark:text-green-300 flex-1">{resubmitAttachment.filename}</span>
-                          <button type="button" onClick={() => { setResubmitAttachment(null); setResubmitFile(null); }} className="text-xs text-red-500 hover:text-red-700 shrink-0">Remove</button>
+                          <span className="truncate text-green-700 dark:text-green-300 flex-1">
+                            {resubmitAttachment.filename}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setResubmitAttachment(null);
+                              setResubmitFile(null);
+                            }}
+                            className="text-xs text-red-500 hover:text-red-700 shrink-0"
+                          >
+                            Remove
+                          </button>
                         </div>
                       ) : resubmitFile ? (
                         <div className="flex items-center gap-2 p-2 rounded bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 text-sm">
-                          <span className="truncate text-blue-700 dark:text-blue-300 flex-1">{resubmitFile.name}</span>
-                          <button type="button" onClick={() => setResubmitFile(null)} className="text-xs text-red-500 hover:text-red-700 shrink-0">Remove</button>
+                          <span className="truncate text-blue-700 dark:text-blue-300 flex-1">
+                            {resubmitFile.name}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setResubmitFile(null)}
+                            className="text-xs text-red-500 hover:text-red-700 shrink-0"
+                          >
+                            Remove
+                          </button>
                         </div>
                       ) : (
                         <label className="flex items-center gap-2 p-2.5 border-2 border-dashed rounded-lg cursor-pointer hover:border-primary/50 transition-colors text-sm text-muted-foreground">
-                          <input type="file" className="sr-only" accept=".pdf,.jpg,.jpeg,.png,.gif,.doc,.docx,.txt,.zip" onChange={(e) => { const f = e.target.files?.[0]; if (f) setResubmitFile(f); }} />
+                          <input
+                            type="file"
+                            className="sr-only"
+                            accept=".pdf,.jpg,.jpeg,.png,.gif,.doc,.docx,.txt,.zip"
+                            onChange={(e) => {
+                              const f = e.target.files?.[0];
+                              if (f) setResubmitFile(f);
+                            }}
+                          />
                           <span>Click to attach a file</span>
                         </label>
                       )}

@@ -1,5 +1,11 @@
 import { useState, useEffect } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,7 +29,13 @@ import {
 import { useWeb3 } from "@/contexts/web3-context";
 import { useToast } from "@/hooks/use-toast";
 import { contractService } from "@/lib/web3/contract-service";
-import { Shield, UserPlus, UserMinus, Loader2, CheckCircle2 } from "lucide-react";
+import {
+  Shield,
+  UserPlus,
+  UserMinus,
+  Loader2,
+  CheckCircle2,
+} from "lucide-react";
 
 interface ArbiterManagementProps {
   onArbiterAdded?: () => void;
@@ -33,7 +45,10 @@ interface ArbiterManagementProps {
 // Stellar public key: starts with G, 56 chars total
 const isStellarAddress = (addr: string) => /^G[A-Z2-7]{55}$/.test(addr.trim());
 
-export function ArbiterManagement({ onArbiterAdded, onArbiterRemoved }: ArbiterManagementProps) {
+export function ArbiterManagement({
+  onArbiterAdded,
+  onArbiterRemoved,
+}: ArbiterManagementProps) {
   const { wallet } = useWeb3();
   const { toast } = useToast();
   const [arbiters, setArbiters] = useState<string[]>([]);
@@ -69,7 +84,8 @@ export function ArbiterManagement({ onArbiterAdded, onArbiterRemoved }: ArbiterM
     if (!isStellarAddress(trimmed)) {
       toast({
         title: "Invalid address",
-        description: "Please enter a valid Stellar public key (starts with G, 56 chars)",
+        description:
+          "Please enter a valid Stellar public key (starts with G, 56 chars)",
         variant: "destructive",
       });
       return;
@@ -171,7 +187,8 @@ export function ArbiterManagement({ onArbiterAdded, onArbiterRemoved }: ArbiterM
             </Badge>
           </CardTitle>
           <CardDescription>
-            Authorize trusted Stellar addresses to resolve disputes and manage escrow conflicts
+            Authorize trusted Stellar addresses to resolve disputes and manage
+            escrow conflicts
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -186,7 +203,10 @@ export function ArbiterManagement({ onArbiterAdded, onArbiterRemoved }: ArbiterM
                 onChange={(e) => setNewArbiterAddress(e.target.value)}
                 className="font-mono"
               />
-              <Button onClick={handleAddArbiter} disabled={isAdding || !newArbiterAddress}>
+              <Button
+                onClick={handleAddArbiter}
+                disabled={isAdding || !newArbiterAddress}
+              >
                 {isAdding ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -212,7 +232,9 @@ export function ArbiterManagement({ onArbiterAdded, onArbiterRemoved }: ArbiterM
               <div className="text-center py-8 text-muted-foreground border rounded-lg">
                 <Shield className="h-10 w-10 mx-auto mb-3 opacity-50" />
                 <p>No arbiters authorized yet</p>
-                <p className="text-sm">Add trusted Stellar addresses to resolve disputes</p>
+                <p className="text-sm">
+                  Add trusted Stellar addresses to resolve disputes
+                </p>
               </div>
             ) : (
               <div className="border rounded-lg">
@@ -285,7 +307,8 @@ export function ArbiterManagement({ onArbiterAdded, onArbiterRemoved }: ArbiterM
           <DialogHeader>
             <DialogTitle>Remove Arbiter</DialogTitle>
             <DialogDescription>
-              Are you sure you want to remove this arbiter? They will no longer be able to resolve disputes.
+              Are you sure you want to remove this arbiter? They will no longer
+              be able to resolve disputes.
             </DialogDescription>
           </DialogHeader>
           {arbiterToRemove && (

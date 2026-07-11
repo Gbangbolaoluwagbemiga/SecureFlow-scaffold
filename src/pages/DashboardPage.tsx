@@ -375,9 +375,12 @@ export default function DashboardPage() {
                     rejectionReason: m.rejection_reason || undefined,
                     resolvedAt,
                     resolvedBy: m.resolved_by || undefined,
-                    resolutionAmount: m.resolution_freelancer_amount?.toString() || undefined,
-                    resolutionFreelancerAmount: m.resolution_freelancer_amount?.toString() || undefined,
-                    resolutionClientAmount: m.resolution_client_amount?.toString() || undefined,
+                    resolutionAmount:
+                      m.resolution_freelancer_amount?.toString() || undefined,
+                    resolutionFreelancerAmount:
+                      m.resolution_freelancer_amount?.toString() || undefined,
+                    resolutionClientAmount:
+                      m.resolution_client_amount?.toString() || undefined,
                     resolutionReason: m.resolution_reason || undefined,
                   };
                 } catch (error) {

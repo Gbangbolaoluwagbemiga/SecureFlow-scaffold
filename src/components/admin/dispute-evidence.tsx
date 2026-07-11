@@ -1,5 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -7,7 +13,15 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { useWeb3 } from "@/contexts/web3-context";
 import { useToast } from "@/hooks/use-toast";
-import { FileText, Upload, ExternalLink, User, Clock, Loader2, MessageSquare } from "lucide-react";
+import {
+  FileText,
+  Upload,
+  ExternalLink,
+  User,
+  Clock,
+  Loader2,
+  MessageSquare,
+} from "lucide-react";
 import { motion } from "framer-motion";
 import { contractService } from "@/lib/web3/contract-service";
 
@@ -62,7 +76,7 @@ export function DisputeEvidence({
     try {
       const entries = await contractService.getEvidence(
         Number(escrowId),
-        milestoneIndex
+        milestoneIndex,
       );
       setEvidence(entries);
     } catch {
@@ -105,12 +119,13 @@ export function DisputeEvidence({
         Number(escrowId),
         milestoneIndex,
         wallet.address,
-        fullCid
+        fullCid,
       );
 
       toast({
         title: "Evidence submitted!",
-        description: "Your evidence has been recorded on-chain for this dispute",
+        description:
+          "Your evidence has been recorded on-chain for this dispute",
       });
 
       setEvidenceCid("");
@@ -160,7 +175,8 @@ export function DisputeEvidence({
               </Badge>
             </CardTitle>
             <CardDescription>
-              On-chain evidence for Escrow #{escrowId}, Milestone {milestoneIndex + 1}
+              On-chain evidence for Escrow #{escrowId}, Milestone{" "}
+              {milestoneIndex + 1}
             </CardDescription>
           </div>
           <Button
@@ -184,7 +200,9 @@ export function DisputeEvidence({
           <div className="text-center py-8 text-muted-foreground border rounded-lg">
             <FileText className="h-10 w-10 mx-auto mb-3 opacity-50" />
             <p>No evidence submitted yet</p>
-            <p className="text-sm">Both parties can submit evidence to support their case</p>
+            <p className="text-sm">
+              Both parties can submit evidence to support their case
+            </p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -206,7 +224,8 @@ export function DisputeEvidence({
                             {getSubmitterRole(entry.submitter)}
                           </Badge>
                           <span className="text-xs font-mono text-muted-foreground">
-                            {entry.submitter.slice(0, 8)}...{entry.submitter.slice(-6)}
+                            {entry.submitter.slice(0, 8)}...
+                            {entry.submitter.slice(-6)}
                           </span>
                         </div>
                         <div className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -216,7 +235,9 @@ export function DisputeEvidence({
                       </div>
 
                       {description && (
-                        <p className="text-sm mb-2 text-foreground">{description}</p>
+                        <p className="text-sm mb-2 text-foreground">
+                          {description}
+                        </p>
                       )}
 
                       <div className="flex items-center gap-2 bg-muted/50 p-2 rounded">
@@ -224,7 +245,11 @@ export function DisputeEvidence({
                         <code className="text-xs flex-1 truncate">{cid}</code>
                         <Button variant="ghost" size="sm" asChild>
                           <a
-                            href={cid.startsWith("http") ? cid : `https://ipfs.io/ipfs/${cid}`}
+                            href={
+                              cid.startsWith("http")
+                                ? cid
+                                : `https://ipfs.io/ipfs/${cid}`
+                            }
                             target="_blank"
                             rel="noopener noreferrer"
                           >
@@ -255,12 +280,15 @@ export function DisputeEvidence({
                 className="font-mono"
               />
               <p className="text-xs text-muted-foreground">
-                Upload files to IPFS (Pinata, NFT.Storage) and paste the CID, or provide a direct URL
+                Upload files to IPFS (Pinata, NFT.Storage) and paste the CID, or
+                provide a direct URL
               </p>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="evidenceDescription">Description (Optional)</Label>
+              <Label htmlFor="evidenceDescription">
+                Description (Optional)
+              </Label>
               <Textarea
                 id="evidenceDescription"
                 placeholder="Explain what this evidence shows..."
@@ -274,13 +302,23 @@ export function DisputeEvidence({
               <p className="font-semibold">IPFS Upload Services:</p>
               <ul className="list-disc list-inside space-y-0.5 text-muted-foreground">
                 <li>
-                  <a href="https://pinata.cloud" target="_blank" rel="noopener noreferrer" className="underline">
+                  <a
+                    href="https://pinata.cloud"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline"
+                  >
                     Pinata.cloud
                   </a>{" "}
                   — Free IPFS pinning
                 </li>
                 <li>
-                  <a href="https://nft.storage" target="_blank" rel="noopener noreferrer" className="underline">
+                  <a
+                    href="https://nft.storage"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline"
+                  >
                     NFT.Storage
                   </a>{" "}
                   — Free permanent storage

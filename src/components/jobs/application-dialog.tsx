@@ -92,7 +92,9 @@ export function ApplicationDialog({
         if (!cancelled) setMilestonesLoading(false);
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [open, job]);
 
   const hasUserText = coverLetter.trim().length > 10;
@@ -204,7 +206,9 @@ export function ApplicationDialog({
               <Layers className="h-3.5 w-3.5" />
               Milestones
               {milestones && (
-                <span className="font-normal text-muted-foreground">({milestones.length})</span>
+                <span className="font-normal text-muted-foreground">
+                  ({milestones.length})
+                </span>
               )}
             </Label>
             {milestonesLoading ? (
@@ -219,7 +223,9 @@ export function ApplicationDialog({
                     className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-1 sm:gap-3 px-3 py-2 rounded-md border bg-muted/30"
                   >
                     <div className="min-w-0 flex-1">
-                      <div className="text-xs font-medium text-muted-foreground">Milestone {i + 1}</div>
+                      <div className="text-xs font-medium text-muted-foreground">
+                        Milestone {i + 1}
+                      </div>
                       {(m.requirements || m.description) && (
                         <div className="text-sm whitespace-pre-wrap wrap-break-word">
                           {m.requirements || m.description}

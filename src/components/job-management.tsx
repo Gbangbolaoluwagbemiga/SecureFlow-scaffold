@@ -6,7 +6,13 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { useWeb3 } from "@/contexts/web3-context";
 import { contractService } from "@/lib/web3/contract-service";
-import { PlusCircle, MinusCircle, XCircle, AlertTriangle, Info } from "lucide-react";
+import {
+  PlusCircle,
+  MinusCircle,
+  XCircle,
+  AlertTriangle,
+  Info,
+} from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -60,7 +66,11 @@ const PENALTY_TIERS = [
   { threshold: Infinity, pct: 15, label: "15% penalty" },
 ];
 
-function getPenaltyInfo(cancellations: number): { pct: number; label: string; next?: string } {
+function getPenaltyInfo(cancellations: number): {
+  pct: number;
+  label: string;
+  next?: string;
+} {
   for (const tier of PENALTY_TIERS) {
     if (cancellations <= tier.threshold) {
       const idx = PENALTY_TIERS.indexOf(tier);
@@ -68,7 +78,9 @@ function getPenaltyInfo(cancellations: number): { pct: number; label: string; ne
       return {
         pct: tier.pct,
         label: tier.label,
-        next: next ? `After ${tier.threshold + 1} cancellations: ${next.label}` : undefined,
+        next: next
+          ? `After ${tier.threshold + 1} cancellations: ${next.label}`
+          : undefined,
       };
     }
   }
@@ -89,21 +101,24 @@ export function JobManagement({
   const [cancellations, setCancellations] = useState(0);
   const [addOpen, setAddOpen] = useState(false);
   const [addXlm, setAddXlm] = useState("");
-  const [selectedAddMilestone, setSelectedAddMilestone] = useState<number | null>(
-    milestones.length === 1 ? 0 : null,
-  );
+  const [selectedAddMilestone, setSelectedAddMilestone] = useState<
+    number | null
+  >(milestones.length === 1 ? 0 : null);
 
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [withdrawXlm, setWithdrawXlm] = useState("");
-  const [selectedWithdrawMilestone, setSelectedWithdrawMilestone] = useState<number | null>(
-    milestones.length === 1 ? 0 : null,
-  );
+  const [selectedWithdrawMilestone, setSelectedWithdrawMilestone] = useState<
+    number | null
+  >(milestones.length === 1 ? 0 : null);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (isClient && wallet.address) {
-      contractService.getUserCancellations(wallet.address).then(setCancellations).catch(() => {});
+      contractService
+        .getUserCancellations(wallet.address)
+        .then(setCancellations)
+        .catch(() => {});
     }
   }, [isClient, wallet.address]);
 
@@ -116,11 +131,19 @@ export function JobManagement({
 
   const handleAddFunds = async () => {
     if (addXlmNum <= 0) {
-      toast({ title: "Invalid amount", description: "Enter a positive XLM amount.", variant: "destructive" });
+      toast({
+        title: "Invalid amount",
+        description: "Enter a positive XLM amount.",
+        variant: "destructive",
+      });
       return;
     }
     if (milestones.length > 0 && selectedAddMilestone === null) {
-      toast({ title: "Select a milestone", description: "Choose which milestone these funds go to.", variant: "destructive" });
+      toast({
+        title: "Select a milestone",
+        description: "Choose which milestone these funds go to.",
+        variant: "destructive",
+      });
       return;
     }
     if (!wallet.address) {
@@ -149,7 +172,11 @@ export function JobManagement({
       refreshBalance().catch(() => {});
       onUpdate?.();
     } catch (error: any) {
-      toast({ title: "Failed to add funds", description: friendlyError(error), variant: "destructive" });
+      toast({
+        title: "Failed to add funds",
+        description: friendlyError(error),
+        variant: "destructive",
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -157,21 +184,34 @@ export function JobManagement({
 
   const handleWithdrawFunds = async () => {
     if (withdrawXlmNum <= 0) {
-      toast({ title: "Invalid amount", description: "Enter a positive XLM amount.", variant: "destructive" });
+      toast({
+        title: "Invalid amount",
+        description: "Enter a positive XLM amount.",
+        variant: "destructive",
+      });
       return;
     }
     if (withdrawXlmNum > currentXlm) {
-      toast({ title: "Exceeds balance", description: `Cannot withdraw more than ${currentXlm.toFixed(2)} XLM.`, variant: "destructive" });
+      toast({
+        title: "Exceeds balance",
+        description: `Cannot withdraw more than ${currentXlm.toFixed(2)} XLM.`,
+        variant: "destructive",
+      });
       return;
     }
     if (milestones.length > 0 && selectedWithdrawMilestone === null) {
-      toast({ title: "Select a milestone", description: "Choose which milestone to reduce.", variant: "destructive" });
+      toast({
+        title: "Select a milestone",
+        description: "Choose which milestone to reduce.",
+        variant: "destructive",
+      });
       return;
     }
     if (
       selectedWithdrawMilestone !== null &&
       milestones[selectedWithdrawMilestone] &&
-      withdrawXlmNum > stroopsToXlm(milestones[selectedWithdrawMilestone].amount)
+      withdrawXlmNum >
+        stroopsToXlm(milestones[selectedWithdrawMilestone].amount)
     ) {
       toast({
         title: "Amount too large",
@@ -186,7 +226,10 @@ export function JobManagement({
     }
     setIsSubmitting(true);
     try {
-      toast({ title: "Withdrawing funds…", description: "Confirm in your wallet." });
+      toast({
+        title: "Withdrawing funds…",
+        description: "Confirm in your wallet.",
+      });
       await contractService.withdrawJobFunds(
         Number(escrowId),
         wallet.address,
@@ -206,7 +249,11 @@ export function JobManagement({
       refreshBalance().catch(() => {});
       onUpdate?.();
     } catch (error: any) {
-      toast({ title: "Failed to withdraw", description: friendlyError(error), variant: "destructive" });
+      toast({
+        title: "Failed to withdraw",
+        description: friendlyError(error),
+        variant: "destructive",
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -219,7 +266,10 @@ export function JobManagement({
     }
     setIsSubmitting(true);
     try {
-      toast({ title: "Cancelling job…", description: "Confirm in your wallet." });
+      toast({
+        title: "Cancelling job…",
+        description: "Confirm in your wallet.",
+      });
       await contractService.cancelJob(Number(escrowId), wallet.address);
       const penaltyXlm = (currentXlm * penalty.pct) / 100;
       toast({
@@ -232,7 +282,11 @@ export function JobManagement({
       refreshBalance().catch(() => {});
       onUpdate?.();
     } catch (error: any) {
-      toast({ title: "Failed to cancel job", description: friendlyError(error), variant: "destructive" });
+      toast({
+        title: "Failed to cancel job",
+        description: friendlyError(error),
+        variant: "destructive",
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -260,7 +314,8 @@ export function JobManagement({
             <DialogHeader>
               <DialogTitle>Add Funds &amp; Allocate to Milestone</DialogTitle>
               <DialogDescription>
-                Choose how much to add and which milestone should receive the new funds.
+                Choose how much to add and which milestone should receive the
+                new funds.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-2">
@@ -298,8 +353,12 @@ export function JobManagement({
                           }`}
                         >
                           <div className="flex-1 min-w-0 overflow-hidden">
-                            <div className="text-xs font-medium text-muted-foreground">Milestone {m.index + 1}</div>
-                            <div className="text-sm truncate max-w-[260px]">{m.description || "—"}</div>
+                            <div className="text-xs font-medium text-muted-foreground">
+                              Milestone {m.index + 1}
+                            </div>
+                            <div className="text-sm truncate max-w-[260px]">
+                              {m.description || "—"}
+                            </div>
                           </div>
                           <div className="text-xs font-semibold whitespace-nowrap shrink-0 text-right">
                             {amt.toFixed(2)} XLM
@@ -317,12 +376,20 @@ export function JobManagement({
               )}
               <div className="flex gap-2 rounded-md bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 px-3 py-2 text-xs text-blue-700 dark:text-blue-300">
                 <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-                <span>Funds and the milestone amount are updated on-chain in the same transaction.</span>
+                <span>
+                  Funds and the milestone amount are updated on-chain in the
+                  same transaction.
+                </span>
               </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setAddOpen(false)}>Cancel</Button>
-              <Button onClick={handleAddFunds} disabled={isSubmitting || addXlmNum <= 0}>
+              <Button variant="outline" onClick={() => setAddOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={handleAddFunds}
+                disabled={isSubmitting || addXlmNum <= 0}
+              >
                 {isSubmitting ? "Adding…" : "Add Funds"}
               </Button>
             </DialogFooter>
@@ -341,7 +408,8 @@ export function JobManagement({
             <DialogHeader>
               <DialogTitle>Withdraw Funds from Milestone</DialogTitle>
               <DialogDescription>
-                Choose which milestone to reduce and how much to withdraw. Funds return to your wallet immediately.
+                Choose which milestone to reduce and how much to withdraw. Funds
+                return to your wallet immediately.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-2">
@@ -364,13 +432,19 @@ export function JobManagement({
                           }`}
                         >
                           <div className="flex-1 min-w-0 overflow-hidden">
-                            <div className="text-xs font-medium text-muted-foreground">Milestone {m.index + 1}</div>
-                            <div className="text-sm truncate max-w-[260px]">{m.description || "—"}</div>
+                            <div className="text-xs font-medium text-muted-foreground">
+                              Milestone {m.index + 1}
+                            </div>
+                            <div className="text-sm truncate max-w-[260px]">
+                              {m.description || "—"}
+                            </div>
                           </div>
                           <div className="text-xs font-semibold whitespace-nowrap shrink-0 text-right">
                             {amt.toFixed(2)} XLM
                             {selected && withdrawXlmNum > 0 && (
-                              <span className={`block ${withdrawXlmNum > amt ? "text-red-500" : "text-amber-600 dark:text-amber-400"}`}>
+                              <span
+                                className={`block ${withdrawXlmNum > amt ? "text-red-500" : "text-amber-600 dark:text-amber-400"}`}
+                              >
                                 → {Math.max(0, amt - withdrawXlmNum).toFixed(2)}
                               </span>
                             )}
@@ -389,8 +463,11 @@ export function JobManagement({
                   step="0.0000001"
                   min="0"
                   max={
-                    selectedWithdrawMilestone !== null && milestones[selectedWithdrawMilestone]
-                      ? stroopsToXlm(milestones[selectedWithdrawMilestone].amount)
+                    selectedWithdrawMilestone !== null &&
+                    milestones[selectedWithdrawMilestone]
+                      ? stroopsToXlm(
+                          milestones[selectedWithdrawMilestone].amount,
+                        )
                       : currentXlm
                   }
                   placeholder="e.g. 50"
@@ -398,15 +475,22 @@ export function JobManagement({
                   onChange={(e) => setWithdrawXlm(e.target.value)}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Remaining in escrow: {Math.max(0, currentXlm - withdrawXlmNum).toFixed(2)} XLM
+                  Remaining in escrow:{" "}
+                  {Math.max(0, currentXlm - withdrawXlmNum).toFixed(2)} XLM
                 </p>
               </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setWithdrawOpen(false)}>Cancel</Button>
+              <Button variant="outline" onClick={() => setWithdrawOpen(false)}>
+                Cancel
+              </Button>
               <Button
                 onClick={handleWithdrawFunds}
-                disabled={isSubmitting || withdrawXlmNum <= 0 || withdrawXlmNum > currentXlm}
+                disabled={
+                  isSubmitting ||
+                  withdrawXlmNum <= 0 ||
+                  withdrawXlmNum > currentXlm
+                }
               >
                 {isSubmitting ? "Withdrawing…" : "Withdraw Funds"}
               </Button>
@@ -431,30 +515,45 @@ export function JobManagement({
               <AlertDialogDescription asChild>
                 <div className="space-y-3 text-sm">
                   <p>
-                    This cancels the job and refunds your deposit to your wallet. This action cannot be undone.
-                    You can only cancel before a freelancer is assigned.
+                    This cancels the job and refunds your deposit to your
+                    wallet. This action cannot be undone. You can only cancel
+                    before a freelancer is assigned.
                   </p>
 
                   {/* Penalty info */}
-                  <div className={`rounded-md border px-3 py-2 ${penalty.pct > 0 ? "border-amber-400/60 bg-amber-50 dark:bg-amber-900/20" : "border-green-400/60 bg-green-50 dark:bg-green-900/20"}`}>
-                    <p className={`font-medium text-xs ${penalty.pct > 0 ? "text-amber-700 dark:text-amber-300" : "text-green-700 dark:text-green-300"}`}>
+                  <div
+                    className={`rounded-md border px-3 py-2 ${penalty.pct > 0 ? "border-amber-400/60 bg-amber-50 dark:bg-amber-900/20" : "border-green-400/60 bg-green-50 dark:bg-green-900/20"}`}
+                  >
+                    <p
+                      className={`font-medium text-xs ${penalty.pct > 0 ? "text-amber-700 dark:text-amber-300" : "text-green-700 dark:text-green-300"}`}
+                    >
                       {penalty.pct > 0
                         ? `Cancellation penalty: ${penalty.pct}% (${((currentXlm * penalty.pct) / 100).toFixed(2)} XLM forfeited)`
                         : "No penalty — full refund of funds deposited"}
                     </p>
                     {penalty.pct > 0 && (
                       <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">
-                        You will receive {(currentXlm * (1 - penalty.pct / 100)).toFixed(2)} XLM back.
+                        You will receive{" "}
+                        {(currentXlm * (1 - penalty.pct / 100)).toFixed(2)} XLM
+                        back.
                       </p>
                     )}
                     {penalty.next && (
-                      <p className="text-xs text-muted-foreground mt-1">{penalty.next}</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {penalty.next}
+                      </p>
                     )}
                   </div>
 
                   <p className="text-xs text-muted-foreground">
-                    This is your {cancellations + 1}{cancellations === 0 ? "st" : cancellations === 1 ? "nd" : "rd"} cancellation.
-                    Repeated cancellations increase the penalty to discourage abuse.
+                    This is your {cancellations + 1}
+                    {cancellations === 0
+                      ? "st"
+                      : cancellations === 1
+                        ? "nd"
+                        : "rd"}{" "}
+                    cancellation. Repeated cancellations increase the penalty to
+                    discourage abuse.
                   </p>
                 </div>
               </AlertDialogDescription>
@@ -552,7 +651,10 @@ export function translateContractError(raw: string): string {
   const match = raw.match(/Error\(Contract,\s*#(\d+)\)/);
   if (match) {
     const code = parseInt(match[1], 10);
-    return CODE_MAP[code] ?? `Contract error #${code}. Please try again or contact support.`;
+    return (
+      CODE_MAP[code] ??
+      `Contract error #${code}. Please try again or contact support.`
+    );
   }
 
   // Strip raw simulation prefix noise

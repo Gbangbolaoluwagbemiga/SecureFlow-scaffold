@@ -83,7 +83,9 @@ export function JobsStats({
         >
           <div className="flex items-center justify-between">
             <div className="min-w-0 flex-1">
-              <p className="text-sm text-muted-foreground mb-1">Your Projects</p>
+              <p className="text-sm text-muted-foreground mb-1">
+                Your Projects
+              </p>
               <p
                 className={`text-2xl md:text-3xl font-bold break-all ${ongoingProjectsCount >= 3 ? "text-red-600 dark:text-red-400" : "text-accent"}`}
               >

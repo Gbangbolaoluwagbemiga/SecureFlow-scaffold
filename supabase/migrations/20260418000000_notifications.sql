@@ -3,7 +3,7 @@
 create table if not exists public.notifications (
   id uuid primary key default gen_random_uuid(),
   wallet_address text not null,
-  type text not null check (type in ('milestone', 'dispute', 'escrow', 'application')),
+  type text not null check (type in ('milestone', 'dispute', 'escrow', 'application', 'message', 'rating')),
   title text not null,
   message text not null,
   read_at timestamptz,

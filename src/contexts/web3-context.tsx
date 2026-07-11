@@ -102,10 +102,13 @@ export function Web3Provider({ children }: { children: ReactNode }) {
       if (!walletId || !walletAddr) return;
       try {
         const { Horizon } = await import("@stellar/stellar-sdk");
-        const horizonUrl = network.horizonUrl || "https://horizon-testnet.stellar.org";
+        const horizonUrl =
+          network.horizonUrl || "https://horizon-testnet.stellar.org";
         const horizon = new Horizon.Server(horizonUrl);
         const account = await horizon.accounts().accountId(walletAddr).call();
-        const nativeBalance = account.balances.find((b: any) => b.asset_type === "native");
+        const nativeBalance = account.balances.find(
+          (b: any) => b.asset_type === "native",
+        );
         if (nativeBalance) {
           setWalletState((prev) => ({
             ...prev,

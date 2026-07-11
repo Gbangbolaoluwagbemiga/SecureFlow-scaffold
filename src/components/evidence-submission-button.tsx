@@ -70,7 +70,7 @@ export function EvidenceSubmissionButton({
         Number(escrowId),
         milestoneIndex,
         wallet.address,
-        fullCid
+        fullCid,
       );
 
       toast({
@@ -105,7 +105,8 @@ export function EvidenceSubmissionButton({
         <DialogHeader>
           <DialogTitle>Submit Evidence On-Chain</DialogTitle>
           <DialogDescription>
-            Your evidence will be stored permanently on Soroban and is visible to all dispute parties
+            Your evidence will be stored permanently on Soroban and is visible
+            to all dispute parties
           </DialogDescription>
         </DialogHeader>
 
@@ -120,7 +121,8 @@ export function EvidenceSubmissionButton({
               className="font-mono"
             />
             <p className="text-xs text-muted-foreground">
-              Upload files to IPFS (Pinata, NFT.Storage) and paste the CID, or provide a direct URL
+              Upload files to IPFS (Pinata, NFT.Storage) and paste the CID, or
+              provide a direct URL
             </p>
           </div>
 
@@ -139,13 +141,23 @@ export function EvidenceSubmissionButton({
             <p className="font-semibold">IPFS Upload Services:</p>
             <ul className="list-disc list-inside space-y-0.5 text-muted-foreground">
               <li>
-                <a href="https://pinata.cloud" target="_blank" rel="noopener noreferrer" className="underline">
+                <a
+                  href="https://pinata.cloud"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline"
+                >
                   Pinata.cloud
                 </a>{" "}
                 — Free IPFS pinning
               </li>
               <li>
-                <a href="https://nft.storage" target="_blank" rel="noopener noreferrer" className="underline">
+                <a
+                  href="https://nft.storage"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline"
+                >
                   NFT.Storage
                 </a>{" "}
                 — Free permanent storage

@@ -42,7 +42,9 @@ export function MilestoneNegotiation({
 
   const [isProposing, setIsProposing] = useState(false);
   const [proposedXlm, setProposedXlm] = useState("");
-  const [proposedDescription, setProposedDescription] = useState(milestone.description);
+  const [proposedDescription, setProposedDescription] = useState(
+    milestone.description,
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const hasProposal = milestone.status === "proposal_pending";
@@ -50,7 +52,11 @@ export function MilestoneNegotiation({
   const handleProposeChange = async () => {
     const xlm = parseFloat(proposedXlm);
     if (!xlm || xlm <= 0) {
-      toast({ title: "Invalid amount", description: "Enter a valid XLM amount greater than 0.", variant: "destructive" });
+      toast({
+        title: "Invalid amount",
+        description: "Enter a valid XLM amount greater than 0.",
+        variant: "destructive",
+      });
       return;
     }
     if (totalBudget) {
@@ -67,7 +73,10 @@ export function MilestoneNegotiation({
     if (!wallet.address) return;
     setIsSubmitting(true);
     try {
-      toast({ title: "Submitting proposal…", description: "Confirm in your wallet." });
+      toast({
+        title: "Submitting proposal…",
+        description: "Confirm in your wallet.",
+      });
       await contractService.proposeMilestoneChange(
         Number(escrowId),
         milestoneIndex,
@@ -75,13 +84,20 @@ export function MilestoneNegotiation({
         proposedDescription || null,
         wallet.address,
       );
-      toast({ title: "Proposal submitted", description: "The client will review your proposed changes." });
+      toast({
+        title: "Proposal submitted",
+        description: "The client will review your proposed changes.",
+      });
       window.dispatchEvent(new CustomEvent("escrowUpdated"));
       setIsProposing(false);
       setProposedXlm("");
       onUpdate?.();
     } catch (error: any) {
-      toast({ title: "Proposal failed", description: translateContractError(error?.message ?? ""), variant: "destructive" });
+      toast({
+        title: "Proposal failed",
+        description: translateContractError(error?.message ?? ""),
+        variant: "destructive",
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -91,14 +107,30 @@ export function MilestoneNegotiation({
     if (!wallet.address) return;
     setIsSubmitting(true);
     try {
-      toast({ title: "Approving proposal…", description: "Confirm in your wallet." });
-      await contractService.approveMilestoneProposal(Number(escrowId), milestoneIndex, wallet.address);
-      const newXlm = milestone.proposedAmount ? (parseFloat(milestone.proposedAmount) / STROOPS).toFixed(2) : "—";
-      toast({ title: "Proposal approved", description: `Milestone updated to ${newXlm} XLM.` });
+      toast({
+        title: "Approving proposal…",
+        description: "Confirm in your wallet.",
+      });
+      await contractService.approveMilestoneProposal(
+        Number(escrowId),
+        milestoneIndex,
+        wallet.address,
+      );
+      const newXlm = milestone.proposedAmount
+        ? (parseFloat(milestone.proposedAmount) / STROOPS).toFixed(2)
+        : "—";
+      toast({
+        title: "Proposal approved",
+        description: `Milestone updated to ${newXlm} XLM.`,
+      });
       window.dispatchEvent(new CustomEvent("escrowUpdated"));
       onUpdate?.();
     } catch (error: any) {
-      toast({ title: "Approval failed", description: translateContractError(error?.message ?? ""), variant: "destructive" });
+      toast({
+        title: "Approval failed",
+        description: translateContractError(error?.message ?? ""),
+        variant: "destructive",
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -108,13 +140,27 @@ export function MilestoneNegotiation({
     if (!wallet.address) return;
     setIsSubmitting(true);
     try {
-      toast({ title: "Rejecting proposal…", description: "Confirm in your wallet." });
-      await contractService.rejectMilestoneProposal(Number(escrowId), milestoneIndex, wallet.address);
-      toast({ title: "Proposal rejected", description: "The freelancer can submit a revised proposal." });
+      toast({
+        title: "Rejecting proposal…",
+        description: "Confirm in your wallet.",
+      });
+      await contractService.rejectMilestoneProposal(
+        Number(escrowId),
+        milestoneIndex,
+        wallet.address,
+      );
+      toast({
+        title: "Proposal rejected",
+        description: "The freelancer can submit a revised proposal.",
+      });
       window.dispatchEvent(new CustomEvent("escrowUpdated"));
       onUpdate?.();
     } catch (error: any) {
-      toast({ title: "Rejection failed", description: translateContractError(error?.message ?? ""), variant: "destructive" });
+      toast({
+        title: "Rejection failed",
+        description: translateContractError(error?.message ?? ""),
+        variant: "destructive",
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -123,35 +169,57 @@ export function MilestoneNegotiation({
   // Client: pending proposal to review
   if (isClient && hasProposal && milestone.proposedAmount) {
     const currentXlm = (parseFloat(milestone.amount) / STROOPS).toFixed(2);
-    const proposedXlmVal = (parseFloat(milestone.proposedAmount) / STROOPS).toFixed(2);
+    const proposedXlmVal = (
+      parseFloat(milestone.proposedAmount) / STROOPS
+    ).toFixed(2);
     return (
       <Card className="glass border-yellow-500/50 p-4 mt-2">
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-2">
               <Edit className="h-4 w-4 text-yellow-500" />
-              <h4 className="font-semibold text-yellow-500 text-sm">Freelancer Proposed a Change</h4>
+              <h4 className="font-semibold text-yellow-500 text-sm">
+                Freelancer Proposed a Change
+              </h4>
             </div>
             <div className="space-y-1.5 text-sm">
               <div>
                 <span className="text-muted-foreground">Proposed amount: </span>
                 <span className="font-semibold">{proposedXlmVal} XLM</span>
-                <span className="text-muted-foreground ml-2">(current: {currentXlm} XLM)</span>
+                <span className="text-muted-foreground ml-2">
+                  (current: {currentXlm} XLM)
+                </span>
               </div>
-              {milestone.proposedDescription && milestone.proposedDescription !== milestone.description && (
-                <div>
-                  <span className="text-muted-foreground">Proposed description: </span>
-                  <p className="mt-1 text-foreground">{milestone.proposedDescription}</p>
-                </div>
-              )}
+              {milestone.proposedDescription &&
+                milestone.proposedDescription !== milestone.description && (
+                  <div>
+                    <span className="text-muted-foreground">
+                      Proposed description:{" "}
+                    </span>
+                    <p className="mt-1 text-foreground">
+                      {milestone.proposedDescription}
+                    </p>
+                  </div>
+                )}
             </div>
           </div>
           <div className="flex gap-2 shrink-0">
-            <Button size="sm" onClick={handleApproveProposal} disabled={isSubmitting} className="gap-1">
+            <Button
+              size="sm"
+              onClick={handleApproveProposal}
+              disabled={isSubmitting}
+              className="gap-1"
+            >
               <Check className="h-4 w-4" />
               Approve
             </Button>
-            <Button size="sm" variant="destructive" onClick={handleRejectProposal} disabled={isSubmitting} className="gap-1">
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={handleRejectProposal}
+              disabled={isSubmitting}
+              className="gap-1"
+            >
               <X className="h-4 w-4" />
               Reject
             </Button>
@@ -167,7 +235,9 @@ export function MilestoneNegotiation({
       <Card className="glass border-yellow-500/50 p-3 mt-2">
         <div className="flex items-center gap-2">
           <MessageSquare className="h-4 w-4 text-yellow-500" />
-          <span className="text-sm text-yellow-500 font-medium">Your proposal is pending client review.</span>
+          <span className="text-sm text-yellow-500 font-medium">
+            Your proposal is pending client review.
+          </span>
         </div>
       </Card>
     );
@@ -196,8 +266,12 @@ export function MilestoneNegotiation({
             <h4 className="font-semibold text-sm mb-3">Propose a Change</h4>
             <div className="space-y-3">
               <div className="space-y-1">
-                <Label htmlFor={`proposed-xlm-${milestoneIndex}`} className="text-xs">
-                  New Amount (XLM) — current: {(parseFloat(milestone.amount) / STROOPS).toFixed(2)} XLM
+                <Label
+                  htmlFor={`proposed-xlm-${milestoneIndex}`}
+                  className="text-xs"
+                >
+                  New Amount (XLM) — current:{" "}
+                  {(parseFloat(milestone.amount) / STROOPS).toFixed(2)} XLM
                 </Label>
                 <Input
                   id={`proposed-xlm-${milestoneIndex}`}
@@ -211,7 +285,10 @@ export function MilestoneNegotiation({
                 />
               </div>
               <div className="space-y-1">
-                <Label htmlFor={`proposed-desc-${milestoneIndex}`} className="text-xs">
+                <Label
+                  htmlFor={`proposed-desc-${milestoneIndex}`}
+                  className="text-xs"
+                >
                   Updated Description (optional)
                 </Label>
                 <Textarea
@@ -223,10 +300,21 @@ export function MilestoneNegotiation({
                 />
               </div>
               <div className="flex gap-2 justify-end">
-                <Button variant="ghost" size="sm" onClick={() => { setIsProposing(false); setProposedXlm(""); }}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setIsProposing(false);
+                    setProposedXlm("");
+                  }}
+                >
                   Cancel
                 </Button>
-                <Button size="sm" disabled={isSubmitting || !proposedXlm} onClick={handleProposeChange}>
+                <Button
+                  size="sm"
+                  disabled={isSubmitting || !proposedXlm}
+                  onClick={handleProposeChange}
+                >
                   {isSubmitting ? "Submitting…" : "Submit Proposal"}
                 </Button>
               </div>

@@ -29,7 +29,9 @@ function extractTxBody(envelopeB64: string): any | null {
       // The inner transaction is always V1 inside a fee-bump
       return envelope.feeBump().tx().innerTx().v1().tx();
     }
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
   return null;
 }
 
@@ -37,7 +39,9 @@ function extractTxBody(envelopeB64: string): any | null {
  * Try to read the Soroban return value (escrow ID) from result_meta_xdr.
  * Returns null if the field is absent or unparseable.
  */
-function extractSorobanReturnValue(resultMetaB64: string | undefined): bigint | null {
+function extractSorobanReturnValue(
+  resultMetaB64: string | undefined,
+): bigint | null {
   if (!resultMetaB64) return null;
   try {
     const txMeta = xdr.TransactionMeta.fromXDR(resultMetaB64, "base64");
@@ -47,7 +51,9 @@ function extractSorobanReturnValue(resultMetaB64: string | undefined): bigint | 
     const raw = scValToNative(sorobanMeta.returnValue() as xdr.ScVal);
     // Escrow ID is returned as u32/i128 — normalise to bigint for comparison
     return BigInt(String(raw));
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
   return null;
 }
 
@@ -62,7 +68,7 @@ function extractSorobanReturnValue(resultMetaB64: string | undefined): bigint | 
 export async function recoverOriginalMilestoneRequirements(
   escrowId: string,
   payerAddress: string,
-  currentMilestoneAmounts: string[]
+  currentMilestoneAmounts: string[],
 ): Promise<(string | null)[]> {
   const count = currentMilestoneAmounts.length;
   const empty: (string | null)[] = new Array(count).fill(null);
@@ -70,7 +76,16 @@ export async function recoverOriginalMilestoneRequirements(
   try {
     const { horizonUrl } = getCurrentNetwork();
     const contractId = CONTRACTS.SECUREFLOW_ESCROW;
-    console.log("[recover-req] start — escrowId:", escrowId, "contractId:", contractId, "payerAddress:", payerAddress, "horizonUrl:", horizonUrl);
+    console.log(
+      "[recover-req] start — escrowId:",
+      escrowId,
+      "contractId:",
+      contractId,
+      "payerAddress:",
+      payerAddress,
+      "horizonUrl:",
+      horizonUrl,
+    );
     if (!contractId || !payerAddress) {
       console.log("[recover-req] aborting: missing contractId or payerAddress");
       return empty;
@@ -90,9 +105,14 @@ export async function recoverOriginalMilestoneRequirements(
 
     const json = await resp.json();
     const records: any[] = json._embedded?.records ?? [];
-    console.log(`[recover-req] escrow ${escrowId}: fetched ${records.length} txs for ${payerAddress}`);
+    console.log(
+      `[recover-req] escrow ${escrowId}: fetched ${records.length} txs for ${payerAddress}`,
+    );
 
-    const candidates: Array<{ descriptions: string[]; confidence: "high" | "low" }> = [];
+    const candidates: Array<{
+      descriptions: string[];
+      confidence: "high" | "low";
+    }> = [];
 
     for (const tx of records) {
       if (!tx.envelope_xdr) continue;
@@ -103,34 +123,54 @@ export async function recoverOriginalMilestoneRequirements(
       for (const op of txBody.operations()) {
         try {
           const body = op.body();
-          if (body.switch().value !== xdr.OperationType.invokeHostFunction().value) continue;
+          if (
+            body.switch().value !== xdr.OperationType.invokeHostFunction().value
+          )
+            continue;
 
           const hostFn = body.invokeHostFunction().hostFunction();
-          if (hostFn.switch().value !== xdr.HostFunctionType.hostFunctionTypeInvokeContract().value) continue;
+          if (
+            hostFn.switch().value !==
+            xdr.HostFunctionType.hostFunctionTypeInvokeContract().value
+          )
+            continue;
 
           const invokeArgs = hostFn.invokeContract();
 
           // Verify it targets our contract
           let txContractId: string;
           try {
-            txContractId = StrKey.encodeContract(invokeArgs.contractAddress().contractId());
-          } catch { continue; }
+            txContractId = StrKey.encodeContract(
+              invokeArgs.contractAddress().contractId(),
+            );
+          } catch {
+            continue;
+          }
           if (txContractId !== contractId) continue;
 
           // Verify function name is create_escrow
-          const fnName = Buffer.from(invokeArgs.functionName()).toString("utf8");
+          const fnName = Buffer.from(invokeArgs.functionName()).toString(
+            "utf8",
+          );
           if (fnName !== "create_escrow") continue;
 
           // Extract milestones from args[4]
           const callArgs = invokeArgs.args();
           if (callArgs.length < 5) continue;
 
-          const milestonesNative: any[] = scValToNative(callArgs[4] as xdr.ScVal) as any[];
-          if (!Array.isArray(milestonesNative) || milestonesNative.length !== count) continue;
+          const milestonesNative: any[] = scValToNative(
+            callArgs[4] as xdr.ScVal,
+          ) as any[];
+          if (
+            !Array.isArray(milestonesNative) ||
+            milestonesNative.length !== count
+          )
+            continue;
 
           const descriptions = milestonesNative.map((m: any) => {
             if (Array.isArray(m)) return String(m[1] ?? "");
-            if (m && typeof m === "object") return String(m[1] ?? m.description ?? "");
+            if (m && typeof m === "object")
+              return String(m[1] ?? m.description ?? "");
             return "";
           });
 
@@ -141,24 +181,30 @@ export async function recoverOriginalMilestoneRequirements(
 
           // Check if amounts match current escrow milestones
           const amountsMatch = txAmounts.every(
-            (a, i) => a === String(BigInt(currentMilestoneAmounts[i] ?? "0"))
+            (a, i) => a === String(BigInt(currentMilestoneAmounts[i] ?? "0")),
           );
 
           // Check Soroban return value for high-confidence match
           const returnedId = extractSorobanReturnValue(tx.result_meta_xdr);
-          const idMatches = returnedId !== null && String(returnedId) === String(escrowId);
+          const idMatches =
+            returnedId !== null && String(returnedId) === String(escrowId);
 
-          console.log(`[recover-req] tx ${tx.id}: idMatches=${idMatches} amountsMatch=${amountsMatch} descs=`, descriptions);
+          console.log(
+            `[recover-req] tx ${tx.id}: idMatches=${idMatches} amountsMatch=${amountsMatch} descs=`,
+            descriptions,
+          );
 
           if (idMatches) {
             // High confidence — return immediately
-            return descriptions.map(d => d || null);
+            return descriptions.map((d) => d || null);
           }
 
           if (amountsMatch) {
             candidates.push({ descriptions, confidence: "low" });
           }
-        } catch { continue; }
+        } catch {
+          continue;
+        }
       }
     }
 
@@ -167,7 +213,7 @@ export async function recoverOriginalMilestoneRequirements(
     // Use best low-confidence candidate (last one wins if multiple match by amounts)
     if (candidates.length > 0) {
       const best = candidates[candidates.length - 1];
-      return best.descriptions.map(d => d || null);
+      return best.descriptions.map((d) => d || null);
     }
   } catch (err) {
     console.error("[recover-req] outer catch:", err);

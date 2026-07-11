@@ -37,7 +37,11 @@ export const signTransaction = async ({
   wallet.setWallet(walletId);
 
   // Wake up the wallet extension's service worker (fixes Chrome MV3 termination)
-  try { await wallet.getAddress(); } catch (_) { /* ignore */ }
+  try {
+    await wallet.getAddress();
+  } catch (_) {
+    /* ignore */
+  }
 
   const signResult = await wallet.signTransaction(txXdr, {
     networkPassphrase: network.networkPassphrase,
@@ -69,7 +73,11 @@ export const signAuthEntries = async (
   wallet.setWallet(walletId);
 
   // Wake up the wallet extension's service worker (fixes Chrome MV3 termination)
-  try { await wallet.getAddress(); } catch (_) { /* ignore */ }
+  try {
+    await wallet.getAddress();
+  } catch (_) {
+    /* ignore */
+  }
 
   const signedAuthEntries = await Promise.all(
     authEntries.map(async (entry: any) => {

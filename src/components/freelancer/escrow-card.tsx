@@ -4,7 +4,15 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { motion } from "framer-motion";
-import { Clock, DollarSign, Calendar, Play, Send, Star, Loader2 } from "lucide-react";
+import {
+  Clock,
+  DollarSign,
+  Calendar,
+  Play,
+  Send,
+  Star,
+  Loader2,
+} from "lucide-react";
 import { ClientRatingDialog } from "@/components/rating/client-rating-dialog";
 import { ContractService } from "@/lib/web3/contract-service";
 import { CONTRACTS } from "@/lib/web3/config";

@@ -90,7 +90,7 @@ function addressInTopics(address: string, topics: unknown[]): boolean {
 // ─── Notification builder ─────────────────────────────────────────────────────
 
 function buildNotification(
-  event: IndexedEvent
+  event: IndexedEvent,
 ): ReturnType<typeof createEscrowNotification> | null {
   const escrowId = getEscrowIdFromTopics(event.topics) ?? "?";
   const milestoneIdx = getMilestoneIndexFromTopics(event.topics);
@@ -189,7 +189,9 @@ export function EventPoller() {
       if (isFirstPollRef.current) {
         isFirstPollRef.current = false;
         // Still dispatch a refresh so dashboards pick up any missed state changes
-        if (newEvents.some((e) => STATE_CHANGING_EVENTS.has(e.eventType as never))) {
+        if (
+          newEvents.some((e) => STATE_CHANGING_EVENTS.has(e.eventType as never))
+        ) {
           dispatchRefresh();
         }
         // Mark all as "already notified" so they don't fire on next poll either

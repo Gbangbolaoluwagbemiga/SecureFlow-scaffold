@@ -105,7 +105,9 @@ const formatTokens = (raw: bigint): string => (Number(raw) / 1e7).toFixed(2);
 export default function AnalyticsPage() {
   const { wallet } = useWeb3();
   const { toast } = useToast();
-  const [platformData, setPlatformData] = useState<PlatformAnalytics | null>(null);
+  const [platformData, setPlatformData] = useState<PlatformAnalytics | null>(
+    null,
+  );
   const [userData, setUserData] = useState<UserAnalytics | null>(null);
   const [trendsData, setTrendsData] = useState<TrendsData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -217,7 +219,9 @@ export default function AnalyticsPage() {
       // User-specific analytics (only when wallet is connected)
       if (wallet.address) {
         try {
-          const userEscrowIds = await contractService.getUserEscrows(wallet.address);
+          const userEscrowIds = await contractService.getUserEscrows(
+            wallet.address,
+          );
           let userCompleted = 0;
           let userActive = 0;
           let userAsClient = 0;
@@ -233,7 +237,8 @@ export default function AnalyticsPage() {
               const isClient =
                 escrow.creator?.toLowerCase() === wallet.address!.toLowerCase();
               const isFreelancer =
-                escrow.freelancer?.toLowerCase() === wallet.address!.toLowerCase();
+                escrow.freelancer?.toLowerCase() ===
+                wallet.address!.toLowerCase();
 
               if (isClient) {
                 userAsClient++;
@@ -326,7 +331,9 @@ export default function AnalyticsPage() {
             disabled={refreshing}
             className="flex items-center gap-2"
           >
-            <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+            <RefreshCw
+              className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
+            />
             Refresh
           </Button>
         </div>

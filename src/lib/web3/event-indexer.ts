@@ -156,16 +156,14 @@ export function clearEventCache(): void {
 export function getEscrowEvents(escrowId: string | number): IndexedEvent[] {
   const numId = Number(escrowId);
   return getStoredEvents().filter((e) =>
-    e.topics.some((t) => t === numId || t === String(numId))
+    e.topics.some((t) => t === numId || t === String(numId)),
   );
 }
 
 /** All indexed events that involve a specific Stellar address in any topic */
 export function getUserEvents(address: string): IndexedEvent[] {
   if (!address) return [];
-  return getStoredEvents().filter((e) =>
-    e.topics.some((t) => t === address)
-  );
+  return getStoredEvents().filter((e) => e.topics.some((t) => t === address));
 }
 
 /** Events of a specific canonical type */
@@ -178,7 +176,7 @@ export function getEventsByType(type: string): IndexedEvent[] {
  * Useful for building activity feeds since a known point.
  */
 export function getEventsSince(
-  options: { since?: string; fromLedger?: number } = {}
+  options: { since?: string; fromLedger?: number } = {},
 ): IndexedEvent[] {
   const all = getStoredEvents();
   if (options.fromLedger !== undefined) {
@@ -225,10 +223,7 @@ export async function syncEvents(): Promise<IndexedEvent[]> {
   } else {
     // First run — fetch latest ledger and look back
     const latestLedger = await server.getLatestLedger();
-    request.startLedger = Math.max(
-      1,
-      latestLedger.sequence - INITIAL_LOOKBACK
-    );
+    request.startLedger = Math.max(1, latestLedger.sequence - INITIAL_LOOKBACK);
   }
 
   let response: rpc.Api.GetEventsResponse;
@@ -355,7 +350,7 @@ export function getActivityFeed(options?: {
 
   // Sort newest first
   events = events.sort(
-    (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
   );
 
   if (options?.limit) events = events.slice(0, options.limit);

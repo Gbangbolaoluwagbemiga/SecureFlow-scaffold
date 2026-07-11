@@ -1,5 +1,11 @@
 import { useState } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -51,7 +57,7 @@ export function AdminDisputeCommunication({
           actionUrl: `/dashboard?escrow=${escrowId}`,
           data: { escrowId, milestoneIndex, from: "admin" },
         },
-        [clientAddress]
+        [clientAddress],
       );
 
       toast({
@@ -91,12 +97,13 @@ export function AdminDisputeCommunication({
           actionUrl: `/freelancer?escrow=${escrowId}`,
           data: { escrowId, milestoneIndex, from: "admin" },
         },
-        [freelancerAddress]
+        [freelancerAddress],
       );
 
       toast({
         title: "Message sent to freelancer",
-        description: "The freelancer will receive your message as a notification",
+        description:
+          "The freelancer will receive your message as a notification",
       });
 
       setMessageToFreelancer("");
@@ -134,7 +141,7 @@ export function AdminDisputeCommunication({
           actionUrl: `/dashboard?escrow=${escrowId}`,
           data: { escrowId, milestoneIndex, from: "admin" },
         },
-        [clientAddress]
+        [clientAddress],
       );
 
       // Send to freelancer
@@ -146,7 +153,7 @@ export function AdminDisputeCommunication({
           actionUrl: `/freelancer?escrow=${escrowId}`,
           data: { escrowId, milestoneIndex, from: "admin" },
         },
-        [freelancerAddress]
+        [freelancerAddress],
       );
 
       toast({
@@ -239,7 +246,8 @@ export function AdminDisputeCommunication({
                 <User className="h-4 w-4" />
                 <span className="text-sm font-medium">Freelancer</span>
                 <Badge variant="outline" className="ml-auto">
-                  {freelancerAddress.slice(0, 6)}...{freelancerAddress.slice(-4)}
+                  {freelancerAddress.slice(0, 6)}...
+                  {freelancerAddress.slice(-4)}
                 </Badge>
               </div>
             </div>
@@ -291,7 +299,8 @@ export function AdminDisputeCommunication({
                 <User className="h-4 w-4" />
                 <span className="text-sm font-medium">Freelancer</span>
                 <Badge variant="outline" className="ml-auto">
-                  {freelancerAddress.slice(0, 6)}...{freelancerAddress.slice(-4)}
+                  {freelancerAddress.slice(0, 6)}...
+                  {freelancerAddress.slice(-4)}
                 </Badge>
               </div>
             </div>
@@ -315,7 +324,11 @@ export function AdminDisputeCommunication({
 
             <Button
               onClick={handleSendToBoth}
-              disabled={sendingToClient || sendingToFreelancer || !(messageToClient || messageToFreelancer).trim()}
+              disabled={
+                sendingToClient ||
+                sendingToFreelancer ||
+                !(messageToClient || messageToFreelancer).trim()
+              }
               className="w-full"
             >
               {sendingToClient || sendingToFreelancer ? (
@@ -334,7 +347,9 @@ export function AdminDisputeCommunication({
         </Tabs>
 
         <div className="mt-4 bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg text-xs space-y-1">
-          <p className="font-semibold text-blue-800 dark:text-blue-200">Communication Tips:</p>
+          <p className="font-semibold text-blue-800 dark:text-blue-200">
+            Communication Tips:
+          </p>
           <ul className="list-disc list-inside space-y-0.5 text-blue-700 dark:text-blue-300">
             <li>Be professional and neutral in your communication</li>
             <li>Request additional evidence if needed</li>

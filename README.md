@@ -50,73 +50,73 @@ SecureFlow is a blockchain-powered freelancer marketplace that enables clients a
 
 ### Core Escrow
 
-| Feature | Description |
-|---------|-------------|
-| Smart contract escrow | Funds locked until milestones approved |
-| Milestone-based payments | Each milestone paid independently upon approval |
-| Open job marketplace | Anyone can apply; client selects the best candidate |
-| Direct contracts | Create with a known freelancer — no application needed |
-| Tiered cancellation | Cancel an unstarted job with a tiered penalty (0–30%) based on cancellation history and application count |
-| Dynamic fund management | Add or withdraw funds from specific milestones before work starts |
-| Deadline extension | Depositor can extend the project deadline |
-| Emergency refund | Automatic refund path after deadline expiration |
+| Feature                  | Description                                                                                               |
+| ------------------------ | --------------------------------------------------------------------------------------------------------- |
+| Smart contract escrow    | Funds locked until milestones approved                                                                    |
+| Milestone-based payments | Each milestone paid independently upon approval                                                           |
+| Open job marketplace     | Anyone can apply; client selects the best candidate                                                       |
+| Direct contracts         | Create with a known freelancer — no application needed                                                    |
+| Tiered cancellation      | Cancel an unstarted job with a tiered penalty (0–30%) based on cancellation history and application count |
+| Dynamic fund management  | Add or withdraw funds from specific milestones before work starts                                         |
+| Deadline extension       | Depositor can extend the project deadline                                                                 |
+| Emergency refund         | Automatic refund path after deadline expiration                                                           |
 
 ### Milestone System
 
-| Feature | Description |
-|---------|-------------|
-| Add / remove milestones | Depositor can add or remove milestones before work starts |
-| Milestone submission | Freelancer submits work with an updated description |
-| Resubmission | Freelancer can resubmit a rejected milestone |
-| Approve / reject | Client approves (pays out) or rejects (with reason) each milestone |
-| Dispute milestone | Either party can dispute; routes to arbiters |
-| Milestone negotiation | Freelancer proposes an amount/description change; client approves or rejects |
-| On-chain evidence | Either party can attach IPFS CIDs as evidence before an arbiter rules |
+| Feature                 | Description                                                                  |
+| ----------------------- | ---------------------------------------------------------------------------- |
+| Add / remove milestones | Depositor can add or remove milestones before work starts                    |
+| Milestone submission    | Freelancer submits work with an updated description                          |
+| Resubmission            | Freelancer can resubmit a rejected milestone                                 |
+| Approve / reject        | Client approves (pays out) or rejects (with reason) each milestone           |
+| Dispute milestone       | Either party can dispute; routes to arbiters                                 |
+| Milestone negotiation   | Freelancer proposes an amount/description change; client approves or rejects |
+| On-chain evidence       | Either party can attach IPFS CIDs as evidence before an arbiter rules        |
 
 ### Dispute Resolution
 
-| Feature | Description |
-|---------|-------------|
-| Per-milestone multi-sig | Arbiters cast votes per disputed milestone |
-| Configurable quorum | `required_confirmations` set at escrow creation |
-| Split payouts | Arbiter specifies exact freelancer and client amounts (must sum to milestone amount) |
-| Vote tracking | `get_dispute_vote_count` and `has_dispute_voted` prevent double-voting |
-| Overdue disputes | Either party can raise a dispute after the deadline |
-| Arbiter award / refund | Arbiters can award the freelancer a partial amount or approve a full client refund |
+| Feature                 | Description                                                                          |
+| ----------------------- | ------------------------------------------------------------------------------------ |
+| Per-milestone multi-sig | Arbiters cast votes per disputed milestone                                           |
+| Configurable quorum     | `required_confirmations` set at escrow creation                                      |
+| Split payouts           | Arbiter specifies exact freelancer and client amounts (must sum to milestone amount) |
+| Vote tracking           | `get_dispute_vote_count` and `has_dispute_voted` prevent double-voting               |
+| Overdue disputes        | Either party can raise a dispute after the deadline                                  |
+| Arbiter award / refund  | Arbiters can award the freelancer a partial amount or approve a full client refund   |
 
 ### Reputation & Ratings
 
-| Feature | Description |
-|---------|-------------|
-| On-chain reputation | Score increases with approved milestones |
-| Client → freelancer rating | 1–5 stars + written review after project completion |
-| Freelancer → client rating | Freelancers can rate clients too |
-| Average ratings | Per-address average rating and count |
-| Badge tiers | Beginner → Intermediate → Advanced → Expert based on completed projects |
+| Feature                    | Description                                                             |
+| -------------------------- | ----------------------------------------------------------------------- |
+| On-chain reputation        | Score increases with approved milestones                                |
+| Client → freelancer rating | 1–5 stars + written review after project completion                     |
+| Freelancer → client rating | Freelancers can rate clients too                                        |
+| Average ratings            | Per-address average rating and count                                    |
+| Badge tiers                | Beginner → Intermediate → Advanced → Expert based on completed projects |
 
 ### Platform Administration
 
-| Feature | Description |
-|---------|-------------|
-| Emergency pause | Owner can pause all write operations instantly |
-| Job creation pause | Pause new job creation without affecting active escrows |
-| Token whitelisting | Only approved tokens accepted |
-| Token blacklisting | Ban a previously whitelisted token |
-| Arbiter management | Authorize or revoke arbiters |
-| Platform fee control | Configurable fee in basis points (max 10%) |
-| Fee withdrawal | Fee collector withdraws accumulated fees per token |
-| Delete escrow | Owner can delete terminal escrows with zero remaining funds |
-| Stuck fund recovery | Owner withdraws excess balance above all escrowed amounts |
+| Feature              | Description                                                 |
+| -------------------- | ----------------------------------------------------------- |
+| Emergency pause      | Owner can pause all write operations instantly              |
+| Job creation pause   | Pause new job creation without affecting active escrows     |
+| Token whitelisting   | Only approved tokens accepted                               |
+| Token blacklisting   | Ban a previously whitelisted token                          |
+| Arbiter management   | Authorize or revoke arbiters                                |
+| Platform fee control | Configurable fee in basis points (max 10%)                  |
+| Fee withdrawal       | Fee collector withdraws accumulated fees per token          |
+| Delete escrow        | Owner can delete terminal escrows with zero remaining funds |
+| Stuck fund recovery  | Owner withdraws excess balance above all escrowed amounts   |
 
 ### Developer Features
 
-| Feature | Description |
-|---------|-------------|
+| Feature                  | Description                                                         |
+| ------------------------ | ------------------------------------------------------------------- |
 | Gasless job applications | Backend fee-bump wraps user's signed XDR — applicants need zero XLM |
-| Paginated applications | `get_applications_page(offset, limit)` for scalable UIs |
-| Application count | `get_application_count` for pagination headers |
-| User escrow index | Per-address list of escrow IDs for fast dashboards |
-| WASM size | 59 KB (well under the 64 KB Soroban limit) |
+| Paginated applications   | `get_applications_page(offset, limit)` for scalable UIs             |
+| Application count        | `get_application_count` for pagination headers                      |
+| User escrow index        | Per-address list of escrow IDs for fast dashboards                  |
+| WASM size                | 59 KB (well under the 64 KB Soroban limit)                          |
 
 ---
 
@@ -129,6 +129,7 @@ Create Job → Apply / Accept → Start Work → Submit Milestones → Approve /
 ### 1. Job Creation
 
 The client deposits funds into the escrow contract and defines:
+
 - Project title, description, and deadline
 - Milestones (amount + description per milestone); amounts must sum to `total_amount - platform_fee`
 - Payment token (native XLM or whitelisted token)
@@ -160,6 +161,7 @@ For each milestone the freelancer submits via `submit_milestone` (or `resubmit_m
 ### 6. Dispute Resolution (per milestone)
 
 Each arbiter calls `resolve_dispute(escrow_id, milestone_index, arbiter, freelancer_amount, client_amount, reason)`. Votes are tracked idempotently. When the vote count reaches `required_confirmations`, the contract:
+
 1. Transfers `freelancer_amount` to the beneficiary
 2. Transfers `client_amount` to the depositor
 3. Marks the milestone `Resolved`
@@ -171,11 +173,11 @@ Each arbiter calls `resolve_dispute(escrow_id, milestone_index, arbiter, freelan
 A depositor can cancel an unstarted (no freelancer assigned) job. The penalty scales with repeat cancellations and the number of applicants who invested time:
 
 | Cancellations | Base penalty |
-|---|---|
-| 0 – 2 | 0% |
-| 3 – 5 | 5% |
-| 6 – 10 | 10% |
-| 11+ | 15% |
+| ------------- | ------------ |
+| 0 – 2         | 0%           |
+| 3 – 5         | 5%           |
+| 6 – 10        | 10%          |
+| 11+           | 15%          |
 
 An additional 0–15% may apply based on application count. Total penalty is capped at 30% and the penalty decays over ~30 days (518,400 ledgers) of inactivity.
 
@@ -240,13 +242,13 @@ React 19 + TypeScript
 
 ### Deployed Contract (Testnet)
 
-| Key | Value |
-|-----|-------|
-| Contract ID | `CBWMVACS6BVU55SQOSU2YLE6PL4J6COXJAWZZLTVFRE4E7UYOW4DX5KQ` |
-| WASM hash | `972dcf84f8a673d0063202ebc725cf16f1147ba9ff2c83de6541d1e1b4defb98` |
-| Network | Test SDF Network ; September 2015 |
-| Platform fee | 250 bp (2.5%) |
-| Owner / fee-collector | `GBL5ZXODI2UVOTTLNJGCJ2N52MO4XEUQB6TMXOEZIAVPGLBPWOJ6HDEE` |
+| Key                   | Value                                                              |
+| --------------------- | ------------------------------------------------------------------ |
+| Contract ID           | `CBWMVACS6BVU55SQOSU2YLE6PL4J6COXJAWZZLTVFRE4E7UYOW4DX5KQ`         |
+| WASM hash             | `972dcf84f8a673d0063202ebc725cf16f1147ba9ff2c83de6541d1e1b4defb98` |
+| Network               | Test SDF Network ; September 2015                                  |
+| Platform fee          | 250 bp (2.5%)                                                      |
+| Owner / fee-collector | `GBL5ZXODI2UVOTTLNJGCJ2N52MO4XEUQB6TMXOEZIAVPGLBPWOJ6HDEE`         |
 
 > **Note:** Stellar testnet resets periodically wipe all contracts. After a reset, rebuild the WASM (`stellar contract build`), upload it, deploy, and call `initialize` once. Update `VITE_SECUREFLOW_CONTRACT_ID` in `.env` to the new contract ID.
 
@@ -330,44 +332,46 @@ delete_escrow(escrow_id)
 
 ### Error Codes
 
-| Code | Name | Meaning |
-|------|------|---------|
-| 1 | `AlreadyInitialized` | `initialize` called twice |
-| 100 | `EscrowNotFound` | Invalid escrow ID |
-| 200 | `Unauthorized` | Caller not authorized |
-| 300 | `InvalidAmount` | Amount ≤ 0 or exceeds bounds |
-| 400 | `InvalidStatus` | Operation not valid for current status |
-| 500 | `MilestoneNotFound` | Invalid milestone index |
-| 600 | `TokenNotWhitelisted` | Token not allowed |
-| 700 | `InsufficientFunds` | Contract balance too low |
-| 800 | `FeeTooHigh` | Fee exceeds 10% |
-| 900 | `AlreadyApplied` | Freelancer already applied |
-| 1000 | `NotApplied` | Freelancer hasn't applied |
-| 1100 | `FreelancerAlreadyAssigned` | Cannot reassign once started |
-| 1200 | `DeadlineNotPassed` | Too early for emergency refund |
-| 1300 | `ContractIsPaused` | Emergency pause active |
-| 1400 | `AlreadyBlacklisted` | Token already blacklisted |
-| 1500 | `NothingToRefund` | Fee balance is zero |
-| 1600 | `InsufficientWithdrawable` | Stuck-fund withdrawal exceeds excess |
-| 1700 | `NotInitialized` | Contract not yet initialized |
-| 1800 | `AlreadyVoted` | Arbiter already voted on this dispute |
-| 1900 | `InvalidVoteSplit` | `freelancer_amount + client_amount ≠ milestone.amount` |
-| 2000 | `NoPendingProposal` (prev. 2400) | No proposal pending to approve/reject |
-| 2100 | `FundsStillLocked` | Escrow has remaining balance, cannot delete |
-| 2200 | `EscrowNotTerminal` | Escrow not in a terminal state |
-| 2300 | `CannotCancelAssignedJob` | Freelancer already assigned |
+| Code | Name                             | Meaning                                                |
+| ---- | -------------------------------- | ------------------------------------------------------ |
+| 1    | `AlreadyInitialized`             | `initialize` called twice                              |
+| 100  | `EscrowNotFound`                 | Invalid escrow ID                                      |
+| 200  | `Unauthorized`                   | Caller not authorized                                  |
+| 300  | `InvalidAmount`                  | Amount ≤ 0 or exceeds bounds                           |
+| 400  | `InvalidStatus`                  | Operation not valid for current status                 |
+| 500  | `MilestoneNotFound`              | Invalid milestone index                                |
+| 600  | `TokenNotWhitelisted`            | Token not allowed                                      |
+| 700  | `InsufficientFunds`              | Contract balance too low                               |
+| 800  | `FeeTooHigh`                     | Fee exceeds 10%                                        |
+| 900  | `AlreadyApplied`                 | Freelancer already applied                             |
+| 1000 | `NotApplied`                     | Freelancer hasn't applied                              |
+| 1100 | `FreelancerAlreadyAssigned`      | Cannot reassign once started                           |
+| 1200 | `DeadlineNotPassed`              | Too early for emergency refund                         |
+| 1300 | `ContractIsPaused`               | Emergency pause active                                 |
+| 1400 | `AlreadyBlacklisted`             | Token already blacklisted                              |
+| 1500 | `NothingToRefund`                | Fee balance is zero                                    |
+| 1600 | `InsufficientWithdrawable`       | Stuck-fund withdrawal exceeds excess                   |
+| 1700 | `NotInitialized`                 | Contract not yet initialized                           |
+| 1800 | `AlreadyVoted`                   | Arbiter already voted on this dispute                  |
+| 1900 | `InvalidVoteSplit`               | `freelancer_amount + client_amount ≠ milestone.amount` |
+| 2000 | `NoPendingProposal` (prev. 2400) | No proposal pending to approve/reject                  |
+| 2100 | `FundsStillLocked`               | Escrow has remaining balance, cannot delete            |
+| 2200 | `EscrowNotTerminal`              | Escrow not in a terminal state                         |
+| 2300 | `CannotCancelAssignedJob`        | Freelancer already assigned                            |
 
 ---
 
 ## Tech Stack
 
 ### Smart Contracts
+
 - **Language:** Rust (no_std)
 - **SDK:** soroban-sdk 23.0.2
 - **Target:** wasm32v1-none
 - **Toolchain:** rust-toolchain.toml (stable channel pinned)
 
 ### Frontend
+
 - **Framework:** React 19
 - **Language:** TypeScript
 - **Build:** Vite
@@ -377,11 +381,13 @@ delete_escrow(escrow_id)
 - **Forms:** React Hook Form + Zod
 
 ### Blockchain Integration
+
 - **SDK:** @stellar/stellar-sdk
 - **Wallets:** @creit.tech/stellar-wallets-kit (Freighter, xBull, Lobstr, etc.)
 - **Generated clients:** `src/contracts/generated/` (auto-generated from contract ABI)
 
 ### Backend (Gasless API)
+
 - **Runtime:** Cloudflare Workers (Hono framework)
 - **Purpose:** Wraps user-signed XDRs in Stellar fee-bump transactions so applicants pay zero gas
 
@@ -502,13 +508,13 @@ Update `VITE_SECUREFLOW_CONTRACT_ID` in `.env` and `environments.toml` with the 
 
 ### What to know
 
-| Risk | Status | Mitigation |
-|------|--------|------------|
-| `ADMIN_SECRET_KEY` in `backend/.env` | Not in git | This key controls the gasless fee-bump wallet AND owns the contract. Rotate immediately if compromised. |
-| `VITE_API_SECRET` bundled in frontend JS | By design | Provides light authorization for the gasless API. Not a blockchain private key. Rotate via backend re-deploy. |
-| `VITE_SECRET_KEY` in `.env` | Not in git, not used in frontend code | Stale variable — safe to remove. |
-| Soroban testnet resets | Periodic | Redeploy WASM, call `initialize`, update `.env` and `environments.toml`. |
-| Contract instance TTL | Managed | All writes call `extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT)`. |
+| Risk                                     | Status                                | Mitigation                                                                                                    |
+| ---------------------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `ADMIN_SECRET_KEY` in `backend/.env`     | Not in git                            | This key controls the gasless fee-bump wallet AND owns the contract. Rotate immediately if compromised.       |
+| `VITE_API_SECRET` bundled in frontend JS | By design                             | Provides light authorization for the gasless API. Not a blockchain private key. Rotate via backend re-deploy. |
+| `VITE_SECRET_KEY` in `.env`              | Not in git, not used in frontend code | Stale variable — safe to remove.                                                                              |
+| Soroban testnet resets                   | Periodic                              | Redeploy WASM, call `initialize`, update `.env` and `environments.toml`.                                      |
+| Contract instance TTL                    | Managed                               | All writes call `extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT)`.                              |
 
 ---
 

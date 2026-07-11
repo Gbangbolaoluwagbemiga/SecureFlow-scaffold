@@ -31,12 +31,12 @@ export function FreelancerStats({
 }: FreelancerStatsProps) {
   const totalEarnings = escrows.reduce(
     (sum, escrow) => sum + Number.parseFloat(escrow.releasedAmount),
-    0
+    0,
   );
 
   const totalValue = escrows.reduce(
     (sum, escrow) => sum + Number.parseFloat(escrow.totalAmount),
-    0
+    0,
   );
 
   // Escrow has/had issues: any disputed, rejected, or resolved-via-dispute milestone
@@ -45,7 +45,7 @@ export function FreelancerStats({
       (milestone: any) =>
         milestone.status === "disputed" ||
         milestone.status === "rejected" ||
-        milestone.status === "resolved"
+        milestone.status === "resolved",
     );
   };
 
@@ -53,13 +53,16 @@ export function FreelancerStats({
   const completedProjects = escrows.filter((escrow) => {
     if (escrow.milestones.length === 0) return false;
     return (
-      escrow.milestones.every((milestone: any) => milestone.status === "approved") &&
-      !isEscrowTerminated(escrow)
+      escrow.milestones.every(
+        (milestone: any) => milestone.status === "approved",
+      ) && !isEscrowTerminated(escrow)
     );
   }).length;
 
   // Disputed = any milestone was/is disputed, rejected, or resolved via dispute
-  const terminatedProjects = escrows.filter((escrow) => isEscrowTerminated(escrow)).length;
+  const terminatedProjects = escrows.filter((escrow) =>
+    isEscrowTerminated(escrow),
+  ).length;
 
   const badgeLabel = badge || "Beginner";
 

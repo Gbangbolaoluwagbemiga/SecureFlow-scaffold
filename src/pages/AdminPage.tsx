@@ -24,10 +24,7 @@ import { useWeb3 } from "@/contexts/web3-context";
 import { useToast } from "@/hooks/use-toast";
 import { useAdminStatus } from "@/hooks/use-admin-status";
 import { contractService } from "@/lib/web3/contract-service";
-import {
-  usePauseJobCreation,
-  useUnpauseJobCreation,
-} from "@/hooks/use-admin";
+import { usePauseJobCreation, useUnpauseJobCreation } from "@/hooks/use-admin";
 import {
   Shield,
   CheckCircle2,
@@ -62,7 +59,8 @@ export default function AdminPage() {
   const [contractOwner, setContractOwner] = useState<string | null>(null);
 
   // Derive isOwner from locally-fetched contractOwner (more reliable than useAdminStatus)
-  const isOwner = contractOwner !== null &&
+  const isOwner =
+    contractOwner !== null &&
     wallet.address?.toLowerCase() === contractOwner.toLowerCase();
 
   const [contractStats, setContractStats] = useState({
@@ -74,7 +72,9 @@ export default function AdminPage() {
 
   // Token whitelist state
   const [tokenToWhitelist, setTokenToWhitelist] = useState("");
-  const [whitelistedTokenList, setWhitelistedTokenList] = useState<string[]>([]);
+  const [whitelistedTokenList, setWhitelistedTokenList] = useState<string[]>(
+    [],
+  );
   const [isWhitelisting, setIsWhitelisting] = useState(false);
   const [delistingToken, setDelistingToken] = useState<string | null>(null);
 
@@ -120,12 +120,14 @@ export default function AdminPage() {
 
   const fetchContractStats = async () => {
     try {
-      const [platformFeeBP, totalEscrows, arbiters, tokens] = await Promise.all([
-        contractService.getPlatformFeeBP(),
-        contractService.getTotalEscrows(),
-        contractService.getAuthorizedArbiters(),
-        contractService.getWhitelistedTokens(),
-      ]);
+      const [platformFeeBP, totalEscrows, arbiters, tokens] = await Promise.all(
+        [
+          contractService.getPlatformFeeBP(),
+          contractService.getTotalEscrows(),
+          contractService.getAuthorizedArbiters(),
+          contractService.getWhitelistedTokens(),
+        ],
+      );
       setWhitelistedTokenList(tokens);
       setCurrentFeeBP(platformFeeBP);
       setContractStats({
@@ -143,7 +145,9 @@ export default function AdminPage() {
 
   const checkPausedStatus = async () => {
     try {
-      const paused = await contractService.isJobCreationPaused(wallet.address || undefined);
+      const paused = await contractService.isJobCreationPaused(
+        wallet.address || undefined,
+      );
       setIsPaused(paused);
     } catch {
       setIsPaused(false);
@@ -151,14 +155,20 @@ export default function AdminPage() {
   };
 
   const short = (addr: string, left = 10, right = 8) =>
-    addr.length > left + right ? `${addr.slice(0, left)}…${addr.slice(-right)}` : addr;
+    addr.length > left + right
+      ? `${addr.slice(0, left)}…${addr.slice(-right)}`
+      : addr;
 
   const copy = async (text: string, label: string) => {
     try {
       await navigator.clipboard.writeText(text);
       toast({ title: "Copied", description: `${label} copied to clipboard` });
     } catch {
-      toast({ title: "Copy failed", description: "Clipboard permission denied", variant: "destructive" });
+      toast({
+        title: "Copy failed",
+        description: "Clipboard permission denied",
+        variant: "destructive",
+      });
     }
   };
 
@@ -203,10 +213,20 @@ export default function AdminPage() {
       await fetchContractStats();
     } catch (error: any) {
       const msg = error?.message || "";
-      if (msg.includes("AlreadyWhitelisted") || msg.includes("already whitelisted")) {
-        toast({ title: "USDC Already Whitelisted", description: "This token is already available for escrows." });
+      if (
+        msg.includes("AlreadyWhitelisted") ||
+        msg.includes("already whitelisted")
+      ) {
+        toast({
+          title: "USDC Already Whitelisted",
+          description: "This token is already available for escrows.",
+        });
       } else {
-        toast({ title: "Whitelist Failed", description: msg, variant: "destructive" });
+        toast({
+          title: "Whitelist Failed",
+          description: msg,
+          variant: "destructive",
+        });
       }
     } finally {
       setIsWhitelisting(false);
@@ -236,7 +256,11 @@ export default function AdminPage() {
   const handleSetPlatformFee = async () => {
     const pct = parseFloat(newFeePercent);
     if (isNaN(pct) || pct < 0 || pct > 10) {
-      toast({ title: "Invalid fee", description: "Enter a percentage between 0 and 10.", variant: "destructive" });
+      toast({
+        title: "Invalid fee",
+        description: "Enter a percentage between 0 and 10.",
+        variant: "destructive",
+      });
       return;
     }
     const bp = Math.round(pct * 100);
@@ -245,9 +269,16 @@ export default function AdminPage() {
       await contractService.setPlatformFeeBP(bp);
       setCurrentFeeBP(bp);
       setNewFeePercent("");
-      toast({ title: "Platform fee updated", description: `Fee set to ${pct}% (${bp} basis points).` });
+      toast({
+        title: "Platform fee updated",
+        description: `Fee set to ${pct}% (${bp} basis points).`,
+      });
     } catch (error: any) {
-      toast({ title: "Failed to update fee", description: error?.message || "Transaction failed.", variant: "destructive" });
+      toast({
+        title: "Failed to update fee",
+        description: error?.message || "Transaction failed.",
+        variant: "destructive",
+      });
     } finally {
       setIsSettingFee(false);
     }
@@ -258,24 +289,35 @@ export default function AdminPage() {
     if (!raw) return;
     const onChainId = parseInt(raw, 10);
     if (!Number.isFinite(onChainId) || onChainId <= 0) {
-      toast({ title: "Invalid ID", description: "Enter a valid numeric escrow ID.", variant: "destructive" });
+      toast({
+        title: "Invalid ID",
+        description: "Enter a valid numeric escrow ID.",
+        variant: "destructive",
+      });
       return;
     }
     setIsDeletingEscrow(true);
     try {
       await contractService.deleteEscrow(onChainId);
-      toast({ title: "Escrow deleted", description: `Escrow #${onChainId} has been permanently removed.` });
+      toast({
+        title: "Escrow deleted",
+        description: `Escrow #${onChainId} has been permanently removed.`,
+      });
       setDeleteInput("");
     } catch (error: any) {
       const msg: string = error?.message || "Transaction failed.";
       const friendly = msg.includes("InvalidEscrowStatus")
         ? "Escrow must be in a terminal state (released, refunded, expired, or cancelled) before deletion."
         : msg.includes("InvalidAmount")
-        ? "Escrow still has funds. Ensure all funds are paid out first."
-        : msg.includes("EscrowNotFound")
-        ? "No escrow found with that ID."
-        : msg;
-      toast({ title: "Delete failed", description: friendly, variant: "destructive" });
+          ? "Escrow still has funds. Ensure all funds are paid out first."
+          : msg.includes("EscrowNotFound")
+            ? "No escrow found with that ID."
+            : msg;
+      toast({
+        title: "Delete failed",
+        description: friendly,
+        variant: "destructive",
+      });
     } finally {
       setIsDeletingEscrow(false);
     }
@@ -292,14 +334,19 @@ export default function AdminPage() {
       setPauseDialogOpen(false);
       window.location.reload();
     } catch (error: any) {
-      toast({ title: "Action failed", description: error?.message || "Transaction failed.", variant: "destructive" });
+      toast({
+        title: "Action failed",
+        description: error?.message || "Transaction failed.",
+        variant: "destructive",
+      });
     } finally {
       setPauseActionLoading(false);
     }
   };
 
   const handleWithdraw = async () => {
-    if (!withdrawToken.trim() || !withdrawTo.trim() || !withdrawAmount.trim()) return;
+    if (!withdrawToken.trim() || !withdrawTo.trim() || !withdrawAmount.trim())
+      return;
     setIsWithdrawing(true);
     try {
       await contractService.withdrawStuckFunds({
@@ -307,10 +354,18 @@ export default function AdminPage() {
         to: withdrawTo.trim(),
         amount: withdrawAmount.trim(),
       });
-      toast({ title: "Withdraw submitted", description: "Transaction sent. Funds will transfer after confirmation." });
+      toast({
+        title: "Withdraw submitted",
+        description:
+          "Transaction sent. Funds will transfer after confirmation.",
+      });
       setWithdrawAmount("");
     } catch (e: any) {
-      toast({ title: "Withdraw failed", description: e?.message || "Transaction failed", variant: "destructive" });
+      toast({
+        title: "Withdraw failed",
+        description: e?.message || "Transaction failed",
+        variant: "destructive",
+      });
     } finally {
       setIsWithdrawing(false);
     }
@@ -327,13 +382,17 @@ export default function AdminPage() {
                 <Shield className="h-6 w-6" />
                 Admin Panel
               </CardTitle>
-              <CardDescription>Manage SecureFlow contract settings</CardDescription>
+              <CardDescription>
+                Manage SecureFlow contract settings
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <Alert>
                 <AlertCircle className="h-4 w-4" />
                 <AlertTitle>Wallet not connected</AlertTitle>
-                <AlertDescription>Please connect your wallet to access the admin panel.</AlertDescription>
+                <AlertDescription>
+                  Please connect your wallet to access the admin panel.
+                </AlertDescription>
               </Alert>
             </CardContent>
           </Card>
@@ -361,7 +420,9 @@ export default function AdminPage() {
                 <Shield className="h-6 w-6" />
                 Admin Panel
               </CardTitle>
-              <CardDescription>Manage SecureFlow contract settings</CardDescription>
+              <CardDescription>
+                Manage SecureFlow contract settings
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <Alert variant="destructive">
@@ -382,12 +443,16 @@ export default function AdminPage() {
               <div className="text-xs text-muted-foreground space-y-1">
                 <p>
                   <strong>Your Address:</strong>{" "}
-                  <code className="bg-muted px-1 py-0.5 rounded">{wallet.address}</code>
+                  <code className="bg-muted px-1 py-0.5 rounded">
+                    {wallet.address}
+                  </code>
                 </p>
                 {contractOwner && (
                   <p>
                     <strong>Contract Owner:</strong>{" "}
-                    <code className="bg-muted px-1 py-0.5 rounded">{contractOwner}</code>
+                    <code className="bg-muted px-1 py-0.5 rounded">
+                      {contractOwner}
+                    </code>
                   </p>
                 )}
               </div>
@@ -419,8 +484,15 @@ export default function AdminPage() {
             </AlertTitle>
             <AlertDescription className="flex items-center gap-2">
               You are connected as{" "}
-              <Badge variant={isOwner ? "default" : "secondary"} className="gap-1">
-                {isOwner ? <Shield className="h-3 w-3" /> : <Scale className="h-3 w-3" />}
+              <Badge
+                variant={isOwner ? "default" : "secondary"}
+                className="gap-1"
+              >
+                {isOwner ? (
+                  <Shield className="h-3 w-3" />
+                ) : (
+                  <Scale className="h-3 w-3" />
+                )}
                 {isOwner ? "Contract Owner" : "Authorized Arbiter"}
               </Badge>
             </AlertDescription>
@@ -431,7 +503,8 @@ export default function AdminPage() {
               <AlertTriangle className="h-4 w-4" />
               <AlertTitle>Contract Paused</AlertTitle>
               <AlertDescription>
-                All escrow operations are currently paused. Users cannot create or interact with escrows.
+                All escrow operations are currently paused. Users cannot create
+                or interact with escrows.
               </AlertDescription>
             </Alert>
           )}
@@ -464,14 +537,21 @@ export default function AdminPage() {
                   size="lg"
                 >
                   {isWhitelisting ? (
-                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Whitelisting USDC...</>
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Whitelisting USDC...
+                    </>
                   ) : (
-                    <><Lock className="mr-2 h-4 w-4" />Whitelist USDC Token</>
+                    <>
+                      <Lock className="mr-2 h-4 w-4" />
+                      Whitelist USDC Token
+                    </>
                   )}
                 </Button>
                 {USDC_ADDRESS && (
                   <p className="text-xs text-muted-foreground text-center">
-                    Enable USDC ({short(USDC_ADDRESS, 10, 8)}) for escrow payments
+                    Enable USDC ({short(USDC_ADDRESS, 10, 8)}) for escrow
+                    payments
                   </p>
                 )}
               </CardContent>
@@ -485,7 +565,9 @@ export default function AdminPage() {
                     <Coins className="h-5 w-5" />
                     Add Custom Token
                   </CardTitle>
-                  <CardDescription>Whitelist a Soroban token contract (C...)</CardDescription>
+                  <CardDescription>
+                    Whitelist a Soroban token contract (C...)
+                  </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="space-y-2">
@@ -504,7 +586,10 @@ export default function AdminPage() {
                     className="w-full"
                   >
                     {isWhitelisting ? (
-                      <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Whitelisting...</>
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Whitelisting...
+                      </>
                     ) : (
                       "Whitelist Token"
                     )}
@@ -526,12 +611,16 @@ export default function AdminPage() {
                       <Loader2 className="h-4 w-4 animate-spin" /> Loading...
                     </div>
                   ) : whitelistedTokenList.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No tokens whitelisted yet. Native XLM is always available.</p>
+                    <p className="text-sm text-muted-foreground">
+                      No tokens whitelisted yet. Native XLM is always available.
+                    </p>
                   ) : (
                     <div className="space-y-2">
                       <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3">
                         <p className="text-sm font-semibold text-green-900 dark:text-green-100">
-                          {whitelistedTokenList.length} Token{whitelistedTokenList.length !== 1 ? "s" : ""} Whitelisted
+                          {whitelistedTokenList.length} Token
+                          {whitelistedTokenList.length !== 1 ? "s" : ""}{" "}
+                          Whitelisted
                         </p>
                       </div>
                       <div className="space-y-1">
@@ -552,9 +641,11 @@ export default function AdminPage() {
                               onClick={() => void handleDelistToken(t)}
                               className="shrink-0 p-1.5 rounded text-destructive hover:bg-destructive/10 disabled:opacity-50 transition-colors"
                             >
-                              {delistingToken === t
-                                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                : <Trash2 className="h-3.5 w-3.5" />}
+                              {delistingToken === t ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <Trash2 className="h-3.5 w-3.5" />
+                              )}
                             </button>
                           </div>
                         ))}
@@ -579,7 +670,9 @@ export default function AdminPage() {
                     {currentFeeBP === null ? (
                       <Loader2 className="inline h-3 w-3 animate-spin" />
                     ) : (
-                      <strong>{(currentFeeBP / 100).toFixed(2)}% ({currentFeeBP} bp)</strong>
+                      <strong>
+                        {(currentFeeBP / 100).toFixed(2)}% ({currentFeeBP} bp)
+                      </strong>
                     )}
                   </CardDescription>
                 </CardHeader>
@@ -602,11 +695,16 @@ export default function AdminPage() {
                         disabled={isSettingFee || !newFeePercent}
                         className="shrink-0"
                       >
-                        {isSettingFee ? <Loader2 className="h-4 w-4 animate-spin" /> : "Set Fee"}
+                        {isSettingFee ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          "Set Fee"
+                        )}
                       </Button>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      Enter 0–10%. Stored as basis points (1% = 100 bp). Applies to future deposits.
+                      Enter 0–10%. Stored as basis points (1% = 100 bp). Applies
+                      to future deposits.
                     </p>
                   </div>
                 </CardContent>
@@ -616,13 +714,24 @@ export default function AdminPage() {
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
-                    {isPaused ? <Play className="h-5 w-5" /> : <Pause className="h-5 w-5" />}
+                    {isPaused ? (
+                      <Play className="h-5 w-5" />
+                    ) : (
+                      <Pause className="h-5 w-5" />
+                    )}
                     Contract Controls
                   </CardTitle>
                   <CardDescription>
                     Status:{" "}
-                    <Badge variant={isPaused ? "destructive" : "default"} className="gap-1">
-                      {isPaused ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
+                    <Badge
+                      variant={isPaused ? "destructive" : "default"}
+                      className="gap-1"
+                    >
+                      {isPaused ? (
+                        <Pause className="h-3 w-3" />
+                      ) : (
+                        <Play className="h-3 w-3" />
+                      )}
                       {isPaused ? "Paused" : "Active"}
                     </Badge>
                   </CardDescription>
@@ -640,14 +749,29 @@ export default function AdminPage() {
                     }}
                     variant={isPaused ? "default" : "destructive"}
                     className="w-full gap-2"
-                    disabled={pauseActionLoading || pauseJobCreation.isPending || unpauseJobCreation.isPending}
+                    disabled={
+                      pauseActionLoading ||
+                      pauseJobCreation.isPending ||
+                      unpauseJobCreation.isPending
+                    }
                   >
-                    {pauseActionLoading || pauseJobCreation.isPending || unpauseJobCreation.isPending ? (
-                      <><Loader2 className="h-4 w-4 animate-spin" />Processing...</>
+                    {pauseActionLoading ||
+                    pauseJobCreation.isPending ||
+                    unpauseJobCreation.isPending ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Processing...
+                      </>
                     ) : isPaused ? (
-                      <><Play className="h-4 w-4" />Unpause Contract</>
+                      <>
+                        <Play className="h-4 w-4" />
+                        Unpause Contract
+                      </>
                     ) : (
-                      <><Pause className="h-4 w-4" />Pause Contract</>
+                      <>
+                        <Pause className="h-4 w-4" />
+                        Pause Contract
+                      </>
                     )}
                   </Button>
                 </CardContent>
@@ -662,8 +786,9 @@ export default function AdminPage() {
                   Delete Escrow
                 </CardTitle>
                 <CardDescription>
-                  Permanently removes an escrow record from on-chain storage. The escrow must be
-                  in a terminal state (released, refunded, expired, or cancelled) with zero remaining funds.
+                  Permanently removes an escrow record from on-chain storage.
+                  The escrow must be in a terminal state (released, refunded,
+                  expired, or cancelled) with zero remaining funds.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -683,11 +808,16 @@ export default function AdminPage() {
                       disabled={isDeletingEscrow || !deleteInput.trim()}
                       className="shrink-0"
                     >
-                      {isDeletingEscrow ? <Loader2 className="h-4 w-4 animate-spin" /> : "Delete"}
+                      {isDeletingEscrow ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        "Delete"
+                      )}
                     </Button>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Enter the raw on-chain escrow number. This action is irreversible.
+                    Enter the raw on-chain escrow number. This action is
+                    irreversible.
                   </p>
                 </div>
               </CardContent>
@@ -701,14 +831,17 @@ export default function AdminPage() {
                   Withdraw Stuck Funds
                 </CardTitle>
                 <CardDescription>
-                  Emergency recovery for tokens accidentally transferred to the contract. Only withdraws
-                  the <strong>excess</strong> above what's currently escrowed — cannot drain active escrows.
+                  Emergency recovery for tokens accidentally transferred to the
+                  contract. Only withdraws the <strong>excess</strong> above
+                  what's currently escrowed — cannot drain active escrows.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="withdraw-token">Token Contract (C...)</Label>
+                    <Label htmlFor="withdraw-token">
+                      Token Contract (C...)
+                    </Label>
                     <Input
                       id="withdraw-token"
                       value={withdrawToken}
@@ -741,17 +874,29 @@ export default function AdminPage() {
                 <Button
                   className="w-full gap-2"
                   variant="destructive"
-                  disabled={isWithdrawing || !withdrawToken.trim() || !withdrawTo.trim() || !withdrawAmount.trim()}
+                  disabled={
+                    isWithdrawing ||
+                    !withdrawToken.trim() ||
+                    !withdrawTo.trim() ||
+                    !withdrawAmount.trim()
+                  }
                   onClick={handleWithdraw}
                 >
                   {isWithdrawing ? (
-                    <><Loader2 className="h-4 w-4 animate-spin" />Processing...</>
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Processing...
+                    </>
                   ) : (
-                    <><Scale className="h-4 w-4" />Withdraw Excess</>
+                    <>
+                      <Scale className="h-4 w-4" />
+                      Withdraw Excess
+                    </>
                   )}
                 </Button>
                 <p className="text-xs text-muted-foreground">
-                  Amount is in base units (stroops). For 7-decimal tokens: 1.00 XLM = 10,000,000 stroops.
+                  Amount is in base units (stroops). For 7-decimal tokens: 1.00
+                  XLM = 10,000,000 stroops.
                 </p>
               </CardContent>
             </Card>
@@ -774,7 +919,8 @@ export default function AdminPage() {
               Dispute Management
             </CardTitle>
             <CardDescription>
-              View and resolve disputes on a dedicated page for better performance
+              View and resolve disputes on a dedicated page for better
+              performance
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -786,11 +932,11 @@ export default function AdminPage() {
               Open Dispute Management Page
             </Button>
             <p className="text-xs text-muted-foreground mt-3 text-center">
-              Manage active disputes, review evidence, and communicate with parties
+              Manage active disputes, review evidence, and communicate with
+              parties
             </p>
           </CardContent>
         </Card>
-
       </div>
 
       {/* Pause/Unpause confirmation dialog */}
@@ -799,9 +945,15 @@ export default function AdminPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               {pauseAction === "pause" ? (
-                <><Pause className="h-5 w-5 text-destructive" />Pause Contract</>
+                <>
+                  <Pause className="h-5 w-5 text-destructive" />
+                  Pause Contract
+                </>
               ) : (
-                <><Play className="h-5 w-5 text-primary" />Unpause Contract</>
+                <>
+                  <Play className="h-5 w-5 text-primary" />
+                  Unpause Contract
+                </>
               )}
             </DialogTitle>
             <DialogDescription>
@@ -813,11 +965,16 @@ export default function AdminPage() {
           <Alert variant={pauseAction === "pause" ? "destructive" : "default"}>
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription>
-              This action will be recorded on the blockchain and cannot be undone.
+              This action will be recorded on the blockchain and cannot be
+              undone.
             </AlertDescription>
           </Alert>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setPauseDialogOpen(false)} disabled={pauseActionLoading}>
+            <Button
+              variant="outline"
+              onClick={() => setPauseDialogOpen(false)}
+              disabled={pauseActionLoading}
+            >
               Cancel
             </Button>
             <Button
@@ -826,7 +983,10 @@ export default function AdminPage() {
               disabled={pauseActionLoading}
             >
               {pauseActionLoading ? (
-                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Processing...</>
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Processing...
+                </>
               ) : pauseAction === "pause" ? (
                 "Pause Contract"
               ) : (

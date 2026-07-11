@@ -43,7 +43,7 @@ export default function CreateEscrowPage() {
   const [_isOpenJob, _setIsOpenJob] = useState(false);
   const [isContractPaused, setIsContractPaused] = useState(false);
   const [contractConfigError, setContractConfigError] = useState<string | null>(
-    null
+    null,
   );
   const [isOnCorrectNetwork, setIsOnCorrectNetwork] = useState(true);
   const [errors, setErrors] = useState<{
@@ -116,7 +116,7 @@ export default function CreateEscrowPage() {
   const calculateTotalMilestones = () => {
     return formData.milestones.reduce(
       (sum, m) => sum + (Number.parseFloat(m.amount) || 0),
-      0
+      0,
     );
   };
 
@@ -165,7 +165,8 @@ export default function CreateEscrowPage() {
       }
 
       if (!formData.useNativeToken && !formData.token) {
-        newErrors.tokenAddress = "Please select a token from the whitelisted stablecoins";
+        newErrors.tokenAddress =
+          "Please select a token from the whitelisted stablecoins";
         hasErrors = true;
       }
     } else if (step === 2) {
@@ -242,7 +243,7 @@ export default function CreateEscrowPage() {
         errors.push("Beneficiary address is required for direct escrow");
       } else if (!/^G[A-Z0-9]{55}$/.test(formData.beneficiary)) {
         errors.push(
-          "Beneficiary address must be a valid Stellar address (starts with G)"
+          "Beneficiary address must be a valid Stellar address (starts with G)",
         );
       }
     }
@@ -256,7 +257,7 @@ export default function CreateEscrowPage() {
       const milestone = formData.milestones[i];
       if (!milestone.description || milestone.description.length < 10) {
         errors.push(
-          `Milestone ${i + 1} description must be at least 10 characters long`
+          `Milestone ${i + 1} description must be at least 10 characters long`,
         );
       }
       if (!milestone.amount || Number(milestone.amount) < 0.01) {
@@ -267,7 +268,7 @@ export default function CreateEscrowPage() {
     // Validate milestone amounts sum
     const totalMilestoneAmount = formData.milestones.reduce(
       (sum, milestone) => sum + Number(milestone.amount || 0),
-      0
+      0,
     );
     if (Math.abs(totalMilestoneAmount - Number(formData.totalBudget)) > 0.01) {
       errors.push("Total milestone amounts must equal the total budget");
@@ -277,7 +278,6 @@ export default function CreateEscrowPage() {
   };
 
   const handleSubmit = async () => {
-
     if (!wallet.isConnected) {
       toast({
         title: "Wallet not connected",
@@ -305,7 +305,6 @@ export default function CreateEscrowPage() {
     setIsSubmitting(true);
 
     try {
-
       // Stellar: Handle token approval if using a custom token (not native XLM)
       if (
         formData.token &&
@@ -321,7 +320,7 @@ export default function CreateEscrowPage() {
       }
 
       const milestoneDescriptions = formData.milestones.map(
-        (m) => m.description
+        (m) => m.description,
       );
 
       // Stellar: Use null for open jobs (Option<Address>)
@@ -333,7 +332,7 @@ export default function CreateEscrowPage() {
       // For Stellar, we use stroops instead of wei
       const STROOPS_PER_XLM = 10_000_000;
       const totalAmountInStroops = BigInt(
-        Math.floor(Number.parseFloat(formData.totalBudget) * STROOPS_PER_XLM)
+        Math.floor(Number.parseFloat(formData.totalBudget) * STROOPS_PER_XLM),
       );
 
       // Check native XLM balance using wallet balance
@@ -343,14 +342,14 @@ export default function CreateEscrowPage() {
         const requiredBalance = Number.parseFloat(formData.totalBudget);
         if (walletBalance < requiredBalance) {
           throw new Error(
-            `Insufficient XLM balance. You have ${walletBalance.toFixed(4)} XLM but need ${formData.totalBudget} XLM.`
+            `Insufficient XLM balance. You have ${walletBalance.toFixed(4)} XLM but need ${formData.totalBudget} XLM.`,
           );
         }
       }
 
       // Convert milestone amounts to stroops (Stellar uses stroops, not wei)
       const milestoneAmountsInStroops = formData.milestones.map((m) =>
-        BigInt(Math.floor(Number.parseFloat(m.amount) * STROOPS_PER_XLM))
+        BigInt(Math.floor(Number.parseFloat(m.amount) * STROOPS_PER_XLM)),
       );
 
       // Default arbiter - use a Stellar address (you should replace this with a real arbiter address)
@@ -369,7 +368,7 @@ export default function CreateEscrowPage() {
           [amount.toString(), milestoneDescriptions[idx] || ""] as [
             string,
             string,
-          ]
+          ],
       );
 
       // Use the useCreateEscrow hook
@@ -397,7 +396,7 @@ export default function CreateEscrowPage() {
       addNotification(
         createEscrowNotification("created", String(escrowId), {
           projectTitle: formData.projectTitle,
-        })
+        }),
       );
 
       // Notify the assigned freelancer (if direct escrow, not open job)
@@ -415,7 +414,7 @@ export default function CreateEscrowPage() {
             },
           },
           undefined,
-          beneficiaryAddress
+          beneficiaryAddress,
         );
       }
 
@@ -431,7 +430,8 @@ export default function CreateEscrowPage() {
       if (!createEscrow.isError) {
         toast({
           title: "Action failed",
-          description: error?.message || "Something went wrong. Please try again.",
+          description:
+            error?.message || "Something went wrong. Please try again.",
           variant: "destructive",
         });
       }

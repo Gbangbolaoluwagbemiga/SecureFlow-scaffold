@@ -44,7 +44,8 @@ export function ViewEvidenceButton({
         <DialogHeader>
           <DialogTitle>Dispute Evidence</DialogTitle>
           <DialogDescription>
-            Evidence and communication for Escrow #{escrowId}, Milestone {milestoneIndex}
+            Evidence and communication for Escrow #{escrowId}, Milestone{" "}
+            {milestoneIndex}
           </DialogDescription>
         </DialogHeader>
 

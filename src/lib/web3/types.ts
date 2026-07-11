@@ -1,5 +1,5 @@
 export interface Milestone {
-  description: string;   // freelancer submission response (original requirements before first submission)
+  description: string; // freelancer submission response (original requirements before first submission)
   requirements?: string; // original client requirements — populated once contract v2 is live
   amount: string;
   status:
