@@ -3924,13 +3924,20 @@ export class ContractService {
       transactionToSimulate
     );
 
-    // Sign auth entries if needed
-    if (authEntries && authEntries.length > 0) {
+    // Sign auth entries if needed.
+    // Filter out SorobanCredentialsNone entries (type 0) — these represent source-account
+    // auth that is already satisfied by the outer envelope signature and must NOT be signed;
+    // re-signing them changes their credential type and causes Error(Auth, InvalidAction).
+    const entriesToSign = authEntries.filter((entry: any) => {
+      try { return entry.credentials().switch().value !== 0; } catch { return true; }
+    });
+
+    if (entriesToSign.length > 0) {
       // Use sourceAddress if provided, otherwise use walletAddress
       // For create_escrow, we need to sign auth entries for the depositor
       const authSignerAddress = sourceAddress || walletAddress;
       const signedAuthEntries = await signAuthEntries(
-        authEntries as any[],
+        entriesToSign as any[],
         authSignerAddress
       );
       // Rebuild transaction with signed auth entries
