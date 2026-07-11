@@ -253,7 +253,7 @@ export function EscrowCard({
                         if (["submitted", "approved", "disputed", "resolved", "rejected"].includes(milestone.status)) {
                           // description is the freelancer's submission response
                           submissionResponse = rawBody;
-                          submissionAttachment = attachment;
+                          submissionAttachment = attachment ?? null;
                         } else {
                           // still pending — description IS the requirements (no submission yet)
                           if (!requirements) requirements = rawBody;

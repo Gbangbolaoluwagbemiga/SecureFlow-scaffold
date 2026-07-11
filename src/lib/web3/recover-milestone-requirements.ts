@@ -25,7 +25,7 @@ function extractTxBody(envelopeB64: string): any | null {
     if (sw === xdr.EnvelopeType.envelopeTypeTxV0().value) {
       return envelope.v0().tx();
     }
-    if (sw === xdr.EnvelopeType.envelopeTypeFeeBump().value) {
+    if (sw === xdr.EnvelopeType.envelopeTypeTxFeeBump().value) {
       // The inner transaction is always V1 inside a fee-bump
       return envelope.feeBump().tx().innerTx().v1().tx();
     }
@@ -41,7 +41,7 @@ function extractSorobanReturnValue(resultMetaB64: string | undefined): bigint | 
   if (!resultMetaB64) return null;
   try {
     const txMeta = xdr.TransactionMeta.fromXDR(resultMetaB64, "base64");
-    if (txMeta.switch().value !== 3) return null; // Must be V3 for Soroban
+    if (txMeta.switch() !== 3) return null; // Must be V3 for Soroban
     const sorobanMeta = (txMeta as any).v3().sorobanMeta();
     if (!sorobanMeta) return null;
     const raw = scValToNative(sorobanMeta.returnValue() as xdr.ScVal);

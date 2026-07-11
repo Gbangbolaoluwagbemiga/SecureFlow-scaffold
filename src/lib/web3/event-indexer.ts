@@ -210,7 +210,7 @@ export async function syncEvents(): Promise<IndexedEvent[]> {
   const server = new rpc.Server(network.rpcUrl);
   const storedCursor = getStoredCursor();
 
-  const request: rpc.RpcServer.GetEventsRequest = {
+  const request: rpc.Server.GetEventsRequest = {
     filters: [
       {
         type: "contract",
