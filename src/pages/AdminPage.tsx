@@ -38,6 +38,9 @@ import {
   AlertTriangle,
   Scale,
   Coins,
+  BarChart3,
+  Users,
+  FileText,
 } from "lucide-react";
 import { ArbiterManagement } from "@/components/admin/arbiter-management";
 
@@ -58,7 +61,6 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [contractOwner, setContractOwner] = useState<string | null>(null);
 
-  // Derive isOwner from locally-fetched contractOwner (more reliable than useAdminStatus)
   const isOwner =
     contractOwner !== null &&
     wallet.address?.toLowerCase() === contractOwner.toLowerCase();
@@ -510,8 +512,79 @@ export default function AdminPage() {
           )}
         </div>
 
+        {/* Platform Stats Overview */}
+        {isOwner && !loading && (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
+                    <FileText className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold">
+                      {contractStats.totalEscrows}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Total Escrows
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-green-100 dark:bg-green-900/30">
+                    <Percent className="h-5 w-5 text-green-600 dark:text-green-400" />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold">
+                      {(contractStats.platformFeeBP / 100).toFixed(2)}%
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Platform Fee
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-900/30">
+                    <Users className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold">
+                      {contractStats.authorizedArbiters}
+                    </p>
+                    <p className="text-xs text-muted-foreground">Arbiters</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-orange-100 dark:bg-orange-900/30">
+                    <BarChart3 className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold">
+                      {contractStats.whitelistedTokens}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Tokens Listed
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
         {/* ── Owner-only sections ─────────────────────────────────────────────── */}
-        {/* Show spinner while we wait for contractOwner to resolve */}
         {contractOwner === null && (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -521,10 +594,10 @@ export default function AdminPage() {
         {isOwner && (
           <>
             {/* Quick Actions */}
-            <Card className="md:col-span-2">
+            <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Coins className="h-5 w-5" />
+                  <Lock className="h-5 w-5" />
                   Quick Actions
                 </CardTitle>
                 <CardDescription>Common administrative tasks</CardDescription>
