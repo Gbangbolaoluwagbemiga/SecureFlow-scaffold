@@ -24,6 +24,7 @@ import { useWeb3 } from "@/contexts/web3-context";
 import { useToast } from "@/hooks/use-toast";
 import { useAdminStatus } from "@/hooks/use-admin-status";
 import { contractService } from "@/lib/web3/contract-service";
+import { getNativeXLMSACAddress } from "@/lib/web3/stellar-config";
 import { usePauseJobCreation, useUnpauseJobCreation } from "@/hooks/use-admin";
 import {
   Shield,
@@ -41,6 +42,8 @@ import {
   BarChart3,
   Users,
   FileText,
+  Wallet,
+  RefreshCw,
 } from "lucide-react";
 import { ArbiterManagement } from "@/components/admin/arbiter-management";
 
@@ -95,6 +98,11 @@ export default function AdminPage() {
   const [withdrawAmount, setWithdrawAmount] = useState("");
   const [isWithdrawing, setIsWithdrawing] = useState(false);
 
+  // Platform fees state
+  const [feeBalances, setFeeBalances] = useState<{ token: string; label: string; raw: string; display: string }[]>([]);
+  const [fetchingFees, setFetchingFees] = useState(false);
+  const [withdrawingFeeToken, setWithdrawingFeeToken] = useState<string | null>(null);
+
   // Pause/unpause dialog
   const [pauseDialogOpen, setPauseDialogOpen] = useState(false);
   const [pauseAction, setPauseAction] = useState<"pause" | "unpause">("pause");
@@ -106,6 +114,7 @@ export default function AdminPage() {
         checkPausedStatus(),
         fetchContractOwner(),
         fetchContractStats(),
+        fetchFeeBalances(),
       ]);
     }
   }, [wallet.isConnected, wallet.address]);
@@ -370,6 +379,46 @@ export default function AdminPage() {
       });
     } finally {
       setIsWithdrawing(false);
+    }
+  };
+
+  const fetchFeeBalances = async () => {
+    setFetchingFees(true);
+    try {
+      const xlmAddress = getNativeXLMSACAddress();
+      const tokens = [
+        { token: xlmAddress, label: "XLM" },
+        ...(USDC_ADDRESS ? [{ token: USDC_ADDRESS, label: "USDC" }] : []),
+      ];
+      const results = await Promise.all(
+        tokens.map(async ({ token, label }) => {
+          const raw = await contractService.getWithdrawableFees(token);
+          const stroops = BigInt(raw || "0");
+          const display = stroops === 0n
+            ? "0"
+            : (Number(stroops) / 1e7).toFixed(7).replace(/\.?0+$/, "");
+          return { token, label, raw: String(stroops), display };
+        }),
+      );
+      setFeeBalances(results);
+    } catch {
+      // silently ignore
+    } finally {
+      setFetchingFees(false);
+    }
+  };
+
+  const handleWithdrawFees = async (token: string, label: string) => {
+    if (!wallet.address) return;
+    setWithdrawingFeeToken(token);
+    try {
+      await contractService.withdrawFees(wallet.address, token);
+      toast({ title: "Fees withdrawn", description: `${label} platform fees sent to fee collector.` });
+      await fetchFeeBalances();
+    } catch (e: any) {
+      toast({ title: "Withdraw failed", description: e?.message || "Transaction failed.", variant: "destructive" });
+    } finally {
+      setWithdrawingFeeToken(null);
     }
   };
 
@@ -850,6 +899,80 @@ export default function AdminPage() {
                 </CardContent>
               </Card>
             </div>
+
+            {/* Platform Fees */}
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <Wallet className="h-5 w-5" />
+                      Platform Fees
+                    </CardTitle>
+                    <CardDescription>
+                      Accumulated fees ready to collect. Sent to the fee collector address on withdrawal.
+                    </CardDescription>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={fetchFeeBalances}
+                    disabled={fetchingFees}
+                    className="shrink-0"
+                  >
+                    <RefreshCw className={`h-4 w-4 ${fetchingFees ? "animate-spin" : ""}`} />
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {fetchingFees && feeBalances.length === 0 ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" /> Loading balances...
+                  </div>
+                ) : feeBalances.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No fee data available.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {feeBalances.map(({ token, label, raw, display }) => {
+                      const hasBalance = BigInt(raw) > 0n;
+                      const isWithdrawing = withdrawingFeeToken === token;
+                      return (
+                        <div
+                          key={token}
+                          className="flex items-center justify-between rounded-lg border p-3"
+                        >
+                          <div>
+                            <p className="font-semibold text-sm">{label}</p>
+                            <p className={`text-2xl font-bold ${hasBalance ? "text-green-600 dark:text-green-400" : "text-muted-foreground"}`}>
+                              {display}
+                            </p>
+                            <p className="text-xs text-muted-foreground font-mono">{raw} stroops</p>
+                          </div>
+                          <Button
+                            onClick={() => handleWithdrawFees(token, label)}
+                            disabled={!hasBalance || isWithdrawing || withdrawingFeeToken !== null}
+                            variant={hasBalance ? "default" : "outline"}
+                            size="sm"
+                          >
+                            {isWithdrawing ? (
+                              <>
+                                <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                                Withdrawing...
+                              </>
+                            ) : (
+                              <>
+                                <Wallet className="mr-2 h-3 w-3" />
+                                Collect {label}
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
 
             {/* Delete Escrow */}
             <Card className="border-red-200 dark:border-red-900/50">
