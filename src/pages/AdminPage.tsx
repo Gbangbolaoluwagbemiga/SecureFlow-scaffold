@@ -99,9 +99,13 @@ export default function AdminPage() {
   const [isWithdrawing, setIsWithdrawing] = useState(false);
 
   // Platform fees state
-  const [feeBalances, setFeeBalances] = useState<{ token: string; label: string; raw: string; display: string }[]>([]);
+  const [feeBalances, setFeeBalances] = useState<
+    { token: string; label: string; raw: string; display: string }[]
+  >([]);
   const [fetchingFees, setFetchingFees] = useState(false);
-  const [withdrawingFeeToken, setWithdrawingFeeToken] = useState<string | null>(null);
+  const [withdrawingFeeToken, setWithdrawingFeeToken] = useState<string | null>(
+    null,
+  );
 
   // Pause/unpause dialog
   const [pauseDialogOpen, setPauseDialogOpen] = useState(false);
@@ -394,9 +398,10 @@ export default function AdminPage() {
         tokens.map(async ({ token, label }) => {
           const raw = await contractService.getWithdrawableFees(token);
           const stroops = BigInt(raw || "0");
-          const display = stroops === 0n
-            ? "0"
-            : (Number(stroops) / 1e7).toFixed(7).replace(/\.?0+$/, "");
+          const display =
+            stroops === 0n
+              ? "0"
+              : (Number(stroops) / 1e7).toFixed(7).replace(/\.?0+$/, "");
           return { token, label, raw: String(stroops), display };
         }),
       );
@@ -413,10 +418,17 @@ export default function AdminPage() {
     setWithdrawingFeeToken(token);
     try {
       await contractService.withdrawFees(wallet.address, token);
-      toast({ title: "Fees withdrawn", description: `${label} platform fees sent to fee collector.` });
+      toast({
+        title: "Fees withdrawn",
+        description: `${label} platform fees sent to fee collector.`,
+      });
       await fetchFeeBalances();
     } catch (e: any) {
-      toast({ title: "Withdraw failed", description: e?.message || "Transaction failed.", variant: "destructive" });
+      toast({
+        title: "Withdraw failed",
+        description: e?.message || "Transaction failed.",
+        variant: "destructive",
+      });
     } finally {
       setWithdrawingFeeToken(null);
     }
@@ -910,7 +922,8 @@ export default function AdminPage() {
                       Platform Fees
                     </CardTitle>
                     <CardDescription>
-                      Accumulated fees ready to collect. Sent to the fee collector address on withdrawal.
+                      Accumulated fees ready to collect. Sent to the fee
+                      collector address on withdrawal.
                     </CardDescription>
                   </div>
                   <Button
@@ -920,17 +933,22 @@ export default function AdminPage() {
                     disabled={fetchingFees}
                     className="shrink-0"
                   >
-                    <RefreshCw className={`h-4 w-4 ${fetchingFees ? "animate-spin" : ""}`} />
+                    <RefreshCw
+                      className={`h-4 w-4 ${fetchingFees ? "animate-spin" : ""}`}
+                    />
                   </Button>
                 </div>
               </CardHeader>
               <CardContent>
                 {fetchingFees && feeBalances.length === 0 ? (
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Loader2 className="h-4 w-4 animate-spin" /> Loading balances...
+                    <Loader2 className="h-4 w-4 animate-spin" /> Loading
+                    balances...
                   </div>
                 ) : feeBalances.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No fee data available.</p>
+                  <p className="text-sm text-muted-foreground">
+                    No fee data available.
+                  </p>
                 ) : (
                   <div className="space-y-3">
                     {feeBalances.map(({ token, label, raw, display }) => {
@@ -943,14 +961,22 @@ export default function AdminPage() {
                         >
                           <div>
                             <p className="font-semibold text-sm">{label}</p>
-                            <p className={`text-2xl font-bold ${hasBalance ? "text-green-600 dark:text-green-400" : "text-muted-foreground"}`}>
+                            <p
+                              className={`text-2xl font-bold ${hasBalance ? "text-green-600 dark:text-green-400" : "text-muted-foreground"}`}
+                            >
                               {display}
                             </p>
-                            <p className="text-xs text-muted-foreground font-mono">{raw} stroops</p>
+                            <p className="text-xs text-muted-foreground font-mono">
+                              {raw} stroops
+                            </p>
                           </div>
                           <Button
                             onClick={() => handleWithdrawFees(token, label)}
-                            disabled={!hasBalance || isWithdrawing || withdrawingFeeToken !== null}
+                            disabled={
+                              !hasBalance ||
+                              isWithdrawing ||
+                              withdrawingFeeToken !== null
+                            }
                             variant={hasBalance ? "default" : "outline"}
                             size="sm"
                           >

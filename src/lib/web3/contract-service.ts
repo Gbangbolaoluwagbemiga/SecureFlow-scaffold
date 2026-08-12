@@ -1938,9 +1938,7 @@ export class ContractService {
     return native.map((a) => String(a));
   }
 
-  async getOverdueRequest(
-    escrowId: number,
-  ): Promise<{
+  async getOverdueRequest(escrowId: number): Promise<{
     requester: string;
     reason: string;
     requested_at: number;
