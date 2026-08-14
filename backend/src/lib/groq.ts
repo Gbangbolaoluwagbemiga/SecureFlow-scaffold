@@ -9,9 +9,11 @@ export function getGroq(): Groq | null {
   return groq;
 }
 
-const MILESTONE_MODEL = "llama-3.3-70b-versatile";
-const COVER_LETTER_MODEL = "llama-3.3-70b-versatile";
-const REWRITE_MODEL = "llama-3.3-70b-versatile";
+// llama-3.3-70b-versatile is decommissioned on GroqCloud as of 2026-08-16;
+// migrated to Groq's recommended replacement.
+const MILESTONE_MODEL = "openai/gpt-oss-120b";
+const COVER_LETTER_MODEL = "openai/gpt-oss-120b";
+const REWRITE_MODEL = "openai/gpt-oss-120b";
 
 export async function generateMilestoneSuggestions(input: {
   projectTitle: string;
