@@ -55,7 +55,7 @@ Generate three milestone description options.`;
       { role: "user", content: user },
     ],
     temperature: 0.6,
-    max_tokens: 1024,
+    max_tokens: 4096,
     response_format: { type: "json_object" },
   });
 
@@ -123,7 +123,7 @@ Tone: ${input.tone ?? "professional and confident"}`;
       { role: "user", content: user },
     ],
     temperature: 0.7,
-    max_tokens: 800,
+    max_tokens: 4096,
     response_format: { type: "json_object" },
   });
 
@@ -155,7 +155,7 @@ export async function rewriteProjectDescription(input: {
       { role: "user", content: user },
     ],
     temperature: 0.3,
-    max_tokens: 900,
+    max_tokens: 4096,
     response_format: { type: "json_object" },
   });
 
