@@ -15,7 +15,8 @@ import {
 } from "@/components/ui/dialog";
 import { useWeb3 } from "@/contexts/web3-context";
 import { useToast } from "@/hooks/use-toast";
-import { CONTRACTS } from "@/lib/web3/config";
+import { contractService } from "@/lib/web3/contract-service";
+import { translateContractError } from "@/lib/web3/contract-errors";
 
 import { useNotifications } from "@/contexts/notification-context";
 import { DisputeEvidence } from "./dispute-evidence";
@@ -37,10 +38,32 @@ interface Dispute {
   disputeReason: string;
   disputedAt: number;
   milestoneAmount: number;
+  /** Exact milestone amount in stroops, for an exact on-chain split. */
+  milestoneAmountStroops: string;
   clientAddress: string;
   freelancerAddress: string;
   projectTitle: string;
   milestoneDescription: string;
+}
+
+const STROOPS_PER_TOKEN = 10_000_000;
+/** Disputed, as numbered by contractService.getEscrow (not the contract enum). */
+const ESCROW_STATUS_DISPUTED = 3;
+
+/** Milestone status arrives as a number, a string, or `["Disputed"]`. */
+function milestoneStatusName(status: unknown): string {
+  const names = [
+    "notstarted",
+    "submitted",
+    "approved",
+    "disputed",
+    "resolved",
+    "rejected",
+    "proposalpending",
+  ];
+  if (typeof status === "number") return names[status] ?? "";
+  const raw = Array.isArray(status) ? status[0] : status;
+  return String(raw ?? "").toLowerCase();
 }
 
 interface DisputeResolutionProps {
@@ -50,7 +73,7 @@ interface DisputeResolutionProps {
 export function DisputeResolution({
   onDisputeResolved,
 }: DisputeResolutionProps) {
-  const { wallet, getContract } = useWeb3();
+  const { wallet } = useWeb3();
   const { toast } = useToast();
   const { addCrossWalletNotification } = useNotifications();
   const [disputes, setDisputes] = useState<Dispute[]>([]);
@@ -73,90 +96,39 @@ export function DisputeResolution({
       if (showLoading) {
         setLoading(true);
       }
-      const contract = getContract(CONTRACTS.SECUREFLOW_ESCROW);
-      if (!contract) return;
 
       const disputes: Dispute[] = [];
+      const totalEscrows = await contractService.getTotalEscrows();
 
-      // Get total number of escrows
-      const totalEscrows = await contract.call("next_escrow_id");
-      const escrowCount = Number(totalEscrows);
-
-      // Check each escrow for disputes
-      for (let escrowId = 1; escrowId < escrowCount; escrowId++) {
+      // Escrow ids start at 1. A disputed escrow always has its status set to
+      // Disputed, so only those need their milestones read.
+      for (let escrowId = 1; escrowId <= totalEscrows; escrowId++) {
         try {
-          const escrowSummary = await contract.call("get_escrow", escrowId);
-          // const escrowStatus = Number(escrowSummary[3]); // status is at index 3 - unused
+          const escrow = await contractService.getEscrow(escrowId);
+          if (!escrow || escrow.status !== ESCROW_STATUS_DISPUTED) continue;
 
-          // Get milestone details for this escrow (check all escrows, not just disputed ones)
-          const milestoneCount = Number(escrowSummary[11]); // milestoneCount is at index 11
-
-          for (
-            let milestoneIndex = 0;
-            milestoneIndex < milestoneCount;
-            milestoneIndex++
-          ) {
-            try {
-              const milestone = await contract.call(
-                "milestones",
-                escrowId,
-                milestoneIndex,
-              );
-              const milestoneStatus = Number(milestone[2]); // status is at index 2
-
-              // Check if this milestone is disputed (3 = Disputed)
-              if (milestoneStatus === 3) {
-                const dispute: Dispute = {
-                  escrowId: escrowId.toString(),
-                  milestoneIndex,
-                  disputedBy: milestone[6], // disputedBy is at index 6
-                  disputeReason: milestone[7], // disputeReason is at index 7
-                  disputedAt: Number(milestone[5]), // disputedAt is at index 5
-                  milestoneAmount: Number(milestone[1]) / 1e7, // amount in tokens
-                  clientAddress: escrowSummary[0], // depositor
-                  freelancerAddress: escrowSummary[1], // beneficiary
-                  projectTitle: escrowSummary[13] || "Untitled Project", // projectTitle
-                  milestoneDescription: milestone[0], // description
-                };
-                disputes.push(dispute);
-              }
-            } catch (milestoneError) {}
-          }
-        } catch (escrowError) {
-          // Try to get milestone data directly even if escrow summary fails
-          try {
-            // Try to get milestones directly using the milestones function
-            for (let milestoneIndex = 0; milestoneIndex < 5; milestoneIndex++) {
-              // Try up to 5 milestones
-              try {
-                const milestone = await contract.call(
-                  "milestones",
-                  escrowId,
-                  milestoneIndex,
-                );
-                const milestoneStatus = Number(milestone[2]); // status is at index 2
-
-                // Check if this milestone is disputed (3 = Disputed)
-                if (milestoneStatus === 3) {
-                  const dispute: Dispute = {
-                    escrowId: escrowId.toString(),
-                    milestoneIndex,
-                    disputedBy: milestone[6], // disputedBy is at index 6
-                    disputeReason: milestone[7], // disputeReason is at index 7
-                    disputedAt: Number(milestone[5]), // disputedAt is at index 5
-                    milestoneAmount: Number(milestone[1]) / 1e7, // amount in tokens
-                    clientAddress: "Unknown", // Can't get from failed escrow summary
-                    freelancerAddress: "Unknown", // Can't get from failed escrow summary
-                    projectTitle: "Unknown Project", // Can't get from failed escrow summary
-                    milestoneDescription: milestone[0], // description
-                  };
-                  disputes.push(dispute);
-                }
-              } catch (milestoneError) {
-                break;
-              }
-            }
-          } catch (directError) {}
+          const milestones = await contractService.getMilestones(escrowId);
+          milestones.forEach((milestone, milestoneIndex) => {
+            if (milestoneStatusName(milestone.status) !== "disputed") return;
+            const amountStroops = BigInt(milestone.amount ?? 0);
+            disputes.push({
+              escrowId: escrowId.toString(),
+              milestoneIndex,
+              disputedBy: String(milestone.disputed_by ?? ""),
+              disputeReason: String(milestone.dispute_reason ?? ""),
+              disputedAt: Number(milestone.disputed_at ?? 0),
+              milestoneAmount: Number(amountStroops) / STROOPS_PER_TOKEN,
+              milestoneAmountStroops: amountStroops.toString(),
+              clientAddress: escrow.creator,
+              freelancerAddress: escrow.freelancer ?? "Unknown",
+              projectTitle: escrow.project_title || "Untitled Project",
+              milestoneDescription: String(
+                milestone.requirements || milestone.description || "",
+              ),
+            });
+          });
+        } catch {
+          // One unreadable escrow must not hide every other dispute.
         }
       }
 
@@ -192,25 +164,35 @@ export function DisputeResolution({
   };
 
   const resolveDispute = async () => {
-    if (!selectedDispute) return;
+    if (!selectedDispute || !wallet.address) return;
+    if (!resolutionReason.trim()) {
+      toast({
+        title: "Reason required",
+        description: "Explain the ruling; it is stored on-chain with it.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     try {
       setIsResolving(true);
-      const contract = getContract(CONTRACTS.SECUREFLOW_ESCROW);
-      if (!contract) return;
 
-      // Convert beneficiary amount to wei - handle large numbers safely
-      const amountInTokens = beneficiaryAmount;
-      // Use BigInt to handle large numbers properly
-      const amountInWei = BigInt(Math.floor(amountInTokens)) * BigInt(1e7);
-      const beneficiaryAmountWei = amountInWei.toString();
+      // Split the milestone exactly: the contract requires
+      // freelancer + client == milestone amount, in stroops.
+      const total = BigInt(selectedDispute.milestoneAmountStroops);
+      const requested = BigInt(
+        Math.round(beneficiaryAmount * STROOPS_PER_TOKEN),
+      );
+      const freelancerStroops = requested > total ? total : requested;
+      const clientStroops = total - freelancerStroops;
 
-      const txHash = await contract.send(
-        "resolveDispute",
-        "no-value",
-        selectedDispute.escrowId,
+      const txHash = await contractService.resolveDispute(
+        Number(selectedDispute.escrowId),
         selectedDispute.milestoneIndex,
-        beneficiaryAmountWei,
+        wallet.address,
+        freelancerStroops.toString(),
+        clientStroops.toString(),
+        resolutionReason.trim(),
       );
 
       toast({
@@ -244,7 +226,9 @@ export function DisputeResolution({
     } catch (error: any) {
       toast({
         title: "Resolution Failed",
-        description: error.message || "Failed to resolve dispute",
+        description: translateContractError(
+          error?.message || "Failed to resolve dispute",
+        ),
         variant: "destructive",
       });
     } finally {
@@ -484,7 +468,7 @@ export function DisputeResolution({
               {/* Resolution Reason */}
               <div className="space-y-2">
                 <Label htmlFor="resolution-reason">
-                  Resolution Reason (Optional)
+                  Resolution Reason (required, stored on-chain)
                 </Label>
                 <Input
                   id="resolution-reason"
@@ -521,7 +505,7 @@ export function DisputeResolution({
             </Button>
             <Button
               onClick={resolveDispute}
-              disabled={isResolving}
+              disabled={isResolving || !resolutionReason.trim()}
               className="bg-green-600 hover:bg-green-700"
             >
               {isResolving ? "Resolving..." : "Resolve Dispute"}

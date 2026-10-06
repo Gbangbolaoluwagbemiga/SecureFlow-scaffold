@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { useWeb3 } from "@/contexts/web3-context";
 import { contractService } from "@/lib/web3/contract-service";
+import { translateContractError } from "@/lib/web3/contract-errors";
 import {
   PlusCircle,
   MinusCircle,
@@ -573,7 +574,7 @@ export function JobManagement({
       </div>
 
       <p className="text-xs text-muted-foreground mt-4">
-        Fund management is available until a freelancer is assigned to this job.
+        Fund management is available until the freelancer starts work.
       </p>
     </Card>
   );
@@ -582,93 +583,4 @@ export function JobManagement({
 function friendlyError(error: any): string {
   const msg: string = error?.message || String(error);
   return translateContractError(msg);
-}
-
-export function translateContractError(raw: string): string {
-  const CODE_MAP: Record<number, string> = {
-    1000: "Contract is already initialized.",
-    1001: "Platform fee is too high (max 10%).",
-    1002: "Only the contract owner can perform this action.",
-    1003: "Contract is not initialized yet.",
-    1100: "Escrow not found.",
-    1101: "This escrow is not active.",
-    1102: "Invalid escrow status for this action.",
-    1103: "Work has already been started on this escrow.",
-    1104: "Work has not been started yet.",
-    1200: "Job creation is currently paused.",
-    1201: "Invalid duration specified.",
-    1202: "Milestone count does not match.",
-    1203: "Too many milestones (max 10).",
-    1204: "Too many arbiters specified.",
-    1205: "Invalid number of required confirmations.",
-    1206: "This token is not whitelisted.",
-    1300: "This job is not an open job.",
-    1301: "This job is closed to new applications.",
-    1302: "You cannot apply to your own job.",
-    1303: "Too many applications on this job.",
-    1304: "Only the job creator can perform this action.",
-    1305: "This freelancer has not applied to this job.",
-    1306: "You have already applied to this job.",
-    1400: "Invalid milestone index.",
-    1401: "This milestone has already been submitted.",
-    1402: "This milestone has not been submitted yet.",
-    1403: "This milestone has already been processed.",
-    1500: "Nothing to refund.",
-    1501: "The deadline has not passed yet.",
-    1502: "The emergency refund period has not been reached.",
-    1503: "Cannot refund — funds are still locked.",
-    1504: "Invalid deadline extension.",
-    1505: "Cannot extend the deadline.",
-    1600: "Only the assigned freelancer can perform this action.",
-    1601: "You are not authorized to perform this action.",
-    1700: "The amount entered is invalid (must be greater than zero).",
-    1701: "Invalid address provided.",
-    1702: "Invalid parameter.",
-    1703: "Insufficient withdrawable balance for this milestone.",
-    1704: "No overdue dispute request found.",
-    1705: "No arbiters are available for this escrow.",
-    1800: "This escrow is not completed yet.",
-    1801: "A rating has already been submitted.",
-    1802: "Invalid rating value (must be 1–5).",
-    1803: "Only the client can submit a rating.",
-    1804: "Only the freelancer can submit a rating.",
-    1805: "Client rating already submitted.",
-    1900: "You are not a party to this escrow.",
-    1901: "Evidence CID cannot be empty.",
-    2000: "The contract is currently paused. Please try again later.",
-    2100: "This token is blacklisted.",
-    2101: "This token is already blacklisted.",
-    2200: "This milestone has already been started.",
-    2201: "Milestone index is out of bounds.",
-    2202: "Cannot modify a started escrow.",
-    2300: "Cannot cancel a job that already has a freelancer assigned.",
-    2400: "No pending proposal found for this milestone.",
-    2500: "Funds are still locked in this escrow.",
-    2501: "This escrow has not reached a terminal state.",
-  };
-
-  // Extract error code from "Error(Contract, #NNNN)" or "HostError: Error(Contract, #NNNN)"
-  const match = raw.match(/Error\(Contract,\s*#(\d+)\)/);
-  if (match) {
-    const code = parseInt(match[1], 10);
-    return (
-      CODE_MAP[code] ??
-      `Contract error #${code}. Please try again or contact support.`
-    );
-  }
-
-  // Strip raw simulation prefix noise
-  if (raw.startsWith("Simulation error: HostError:")) {
-    return raw.replace("Simulation error: HostError: ", "");
-  }
-  if (raw.startsWith("Simulation failed:")) {
-    const inner = raw.replace("Simulation failed:", "").trim();
-    const m2 = inner.match(/Error\(Contract,\s*#(\d+)\)/);
-    if (m2) {
-      const code = parseInt(m2[1], 10);
-      return CODE_MAP[code] ?? `Contract error #${code}.`;
-    }
-  }
-
-  return raw || "Something went wrong. Please try again.";
 }

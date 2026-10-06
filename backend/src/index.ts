@@ -11,6 +11,7 @@ import { gaslessRouter } from "./routes/gasless.js";
 import { evidenceRouter } from "./routes/evidence.js";
 import { analyticsRouter } from "./routes/analytics.js";
 import { applicationsRouter } from "./routes/applications.js";
+import { getSupabase } from "./lib/supabase.js";
 
 const app = express();
 const port = Number(process.env.PORT) || 8787;
@@ -70,13 +71,28 @@ const aiLimiter = rateLimit({
 
 app.use(generalLimiter);
 
-app.get("/health", (_req, res) => {
-  res.json({
-    ok: true,
+// Reports whether Supabase actually answers, not just whether its env vars are
+// set: a paused or deleted project used to show `supabase: true` here while
+// every notification, message and application request failed.
+app.get("/health", async (_req, res) => {
+  const supabase = getSupabase();
+  let supabaseStatus: "ok" | "unconfigured" | "unreachable" = "unconfigured";
+  if (supabase) {
+    try {
+      const { error } = await supabase
+        .from("notifications")
+        .select("id", { head: true, count: "exact" })
+        .limit(1)
+        .abortSignal(AbortSignal.timeout(5000));
+      supabaseStatus = error ? "unreachable" : "ok";
+    } catch {
+      supabaseStatus = "unreachable";
+    }
+  }
+  res.status(supabaseStatus === "unreachable" ? 503 : 200).json({
+    ok: supabaseStatus !== "unreachable",
     groq: !!process.env.GROQ_API_KEY,
-    supabase: !!(
-      process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY
-    ),
+    supabase: supabaseStatus,
   });
 });
 

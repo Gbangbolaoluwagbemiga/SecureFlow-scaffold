@@ -65,6 +65,18 @@ export const EVENT_TYPES = {
   FREELANCER_ACCEPTED: "freelancer_accepted",
   ESCROW_COMPLETED: "escrow_completed",
   ESCROW_REFUNDED: "escrow_refunded",
+  ESCROW_CANCELLED: "escrow_cancelled",
+  ASSIGNMENT_DECLINED: "assignment_declined",
+  JOB_REOPENED: "job_reopened",
+  DEADLINE_EXTENDED: "deadline_extended",
+  OVERDUE_DISPUTE_RAISED: "overdue_dispute_raised",
+  OVERDUE_RESOLVED: "overdue_resolved",
+  MILESTONE_PROPOSAL_SUBMITTED: "milestone_proposal_submitted",
+  MILESTONE_PROPOSAL_APPROVED: "milestone_proposal_approved",
+  MILESTONE_PROPOSAL_REJECTED: "milestone_proposal_rejected",
+  JOB_MANAGER_SET: "job_manager_set",
+  JOB_FUNDS_UPDATED: "job_funds_updated",
+  RATING_SUBMITTED: "rating_submitted",
 } as const;
 
 export type EventType = (typeof EVENT_TYPES)[keyof typeof EVENT_TYPES];

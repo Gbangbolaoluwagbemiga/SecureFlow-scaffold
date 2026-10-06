@@ -44,6 +44,16 @@ const STATE_CHANGING_EVENTS = new Set([
   EVENT_TYPES.FREELANCER_ACCEPTED,
   EVENT_TYPES.ESCROW_COMPLETED,
   EVENT_TYPES.ESCROW_REFUNDED,
+  EVENT_TYPES.ESCROW_CANCELLED,
+  EVENT_TYPES.ASSIGNMENT_DECLINED,
+  EVENT_TYPES.JOB_REOPENED,
+  EVENT_TYPES.DEADLINE_EXTENDED,
+  EVENT_TYPES.OVERDUE_DISPUTE_RAISED,
+  EVENT_TYPES.OVERDUE_RESOLVED,
+  EVENT_TYPES.MILESTONE_PROPOSAL_SUBMITTED,
+  EVENT_TYPES.MILESTONE_PROPOSAL_APPROVED,
+  EVENT_TYPES.MILESTONE_PROPOSAL_REJECTED,
+  EVENT_TYPES.JOB_FUNDS_UPDATED,
 ]);
 
 // ─── Dedup helpers ────────────────────────────────────────────────────────────
@@ -82,9 +92,25 @@ function getMilestoneIndexFromTopics(topics: unknown[]): number | null {
   return null;
 }
 
-function addressInTopics(address: string, topics: unknown[]): boolean {
+/**
+ * Is this wallet someone the event is addressed to?
+ *
+ * The contract puts the party to notify in the topics (never the actor, so
+ * nobody is notified of their own action). Events that concern both parties,
+ * such as `escrow_completed` or `dispute_resolved`, carry the second one in
+ * the data map under one of these keys.
+ */
+const SECOND_PARTY_KEYS = ["depositor", "beneficiary"] as const;
+
+function isAddressedTo(address: string, event: IndexedEvent): boolean {
   // Skip topics[0] (event name symbol) — check the rest
-  return topics.slice(1).some((t) => t === address);
+  if (event.topics.slice(1).some((t) => t === address)) return true;
+  const value = event.value;
+  if (value && typeof value === "object") {
+    const data = value as Record<string, unknown>;
+    return SECOND_PARTY_KEYS.some((key) => data[key] === address);
+  }
+  return false;
 }
 
 // ─── Notification builder ─────────────────────────────────────────────────────
@@ -154,6 +180,84 @@ function buildNotification(
         data: { escrowId },
       };
 
+    case EVENT_TYPES.ESCROW_CANCELLED:
+      return {
+        type: "escrow",
+        title: "Job Cancelled",
+        message: `The client cancelled escrow #${escrowId} before work started`,
+        actionUrl: `/freelancer?escrow=${escrowId}`,
+        data: { escrowId },
+      };
+
+    case EVENT_TYPES.ASSIGNMENT_DECLINED:
+      return {
+        type: "application",
+        title: "Assignment Declined",
+        message: `The freelancer declined escrow #${escrowId}. You can name someone else, reopen it, or cancel.`,
+        actionUrl: `/dashboard?escrow=${escrowId}`,
+        data: { escrowId },
+      };
+
+    case EVENT_TYPES.DEADLINE_EXTENDED:
+      return {
+        type: "escrow",
+        title: "Deadline Extended",
+        message: `The client extended the deadline on escrow #${escrowId}`,
+        actionUrl: `/freelancer?escrow=${escrowId}`,
+        data: { escrowId },
+      };
+
+    case EVENT_TYPES.OVERDUE_DISPUTE_RAISED:
+      return {
+        type: "dispute",
+        title: "Overdue Dispute Raised",
+        message: `Escrow #${escrowId} passed its deadline and was sent to an arbiter`,
+        actionUrl: `/dashboard?escrow=${escrowId}`,
+        data: { escrowId },
+      };
+
+    case EVENT_TYPES.OVERDUE_RESOLVED:
+      return {
+        type: "dispute",
+        title: "Overdue Dispute Resolved",
+        message: `An arbiter settled escrow #${escrowId}`,
+        actionUrl: `/dashboard?escrow=${escrowId}`,
+        data: { escrowId },
+      };
+
+    case EVENT_TYPES.MILESTONE_PROPOSAL_SUBMITTED:
+      if (milestoneIdx === null) return null;
+      return {
+        type: "milestone",
+        title: "Milestone Change Proposed",
+        message: `The freelancer proposed a change to milestone ${milestoneIdx + 1} on escrow #${escrowId}`,
+        actionUrl: `/dashboard?escrow=${escrowId}`,
+        data: { escrowId, milestoneIndex: milestoneIdx },
+      };
+
+    case EVENT_TYPES.MILESTONE_PROPOSAL_APPROVED:
+    case EVENT_TYPES.MILESTONE_PROPOSAL_REJECTED: {
+      if (milestoneIdx === null) return null;
+      const accepted =
+        event.eventType === EVENT_TYPES.MILESTONE_PROPOSAL_APPROVED;
+      return {
+        type: "milestone",
+        title: accepted ? "Proposal Accepted" : "Proposal Declined",
+        message: `The client ${accepted ? "accepted" : "declined"} your change to milestone ${milestoneIdx + 1} on escrow #${escrowId}`,
+        actionUrl: `/freelancer?escrow=${escrowId}`,
+        data: { escrowId, milestoneIndex: milestoneIdx },
+      };
+    }
+
+    case EVENT_TYPES.JOB_MANAGER_SET:
+      return {
+        type: "escrow",
+        title: "You're Managing a Job",
+        message: `You were appointed to manage escrow #${escrowId}`,
+        actionUrl: `/dashboard?escrow=${escrowId}`,
+        data: { escrowId },
+      };
+
     default:
       return null;
   }
@@ -207,7 +311,14 @@ export function EventPoller() {
         if (notifiedIds.has(event.id)) continue;
 
         // Only notify if the current user's address is involved
-        if (!addressInTopics(wallet.address!, event.topics)) continue;
+        if (!isAddressedTo(wallet.address!, event)) continue;
+        // escrow_created lists the creator too (topics[2]); they already got
+        // a local notification when they created it.
+        if (
+          event.eventType === EVENT_TYPES.ESCROW_CREATED &&
+          event.topics[2] === wallet.address
+        )
+          continue;
 
         const notification = buildNotification(event);
         if (notification) {
