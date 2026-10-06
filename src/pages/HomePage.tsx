@@ -25,12 +25,10 @@ export default function HomePage() {
   });
   const [loading, setLoading] = useState(true);
 
+  // Escrow stats are public chain data: show them to every visitor, not only
+  // to connected wallets (judges and new users land here logged out).
   useEffect(() => {
-    if (wallet.isConnected) {
-      fetchStats();
-    } else {
-      setLoading(false);
-    }
+    fetchStats();
   }, [wallet.isConnected]);
 
   const fetchStats = async () => {
@@ -181,7 +179,7 @@ export default function HomePage() {
                     $...
                   </span>
                 ) : (
-                  `$${stats.totalVolume}`
+                  `${stats.totalVolume} XLM`
                 )}
               </div>
               <div className="text-sm text-muted-foreground">

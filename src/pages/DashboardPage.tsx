@@ -72,6 +72,12 @@ export default function DashboardPage() {
         return "disputed";
       case 4:
         return "active"; // Changed from "cancelled" to "active" for disputed escrows
+      case 5:
+        return "refunded";
+      case 6:
+        return "expired";
+      case 7:
+        return "cancelled";
       default:
         return "pending";
     }

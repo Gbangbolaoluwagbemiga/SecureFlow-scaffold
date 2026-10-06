@@ -1,3 +1,4 @@
+import type { Escrow } from "@/lib/web3/types";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -29,7 +30,7 @@ interface JobWithApplications {
   token: string;
   totalAmount: string;
   releasedAmount: string;
-  status: "pending" | "active" | "completed" | "disputed";
+  status: Escrow["status"];
   createdAt: number;
   duration: number;
   milestones: any[];

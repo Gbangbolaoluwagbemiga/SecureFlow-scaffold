@@ -34,6 +34,22 @@ export interface EscrowData {
   project_description?: string;
 }
 
+/**
+ * UI numbering of contract `EscrowStatus` (kept stable for existing pages:
+ * 0 pending, 1 active, 2 completed, 3 disputed).
+ */
+export const ESCROW_STATUS_NUMBER: Record<string, number> = {
+  pending: 0,
+  inprogress: 1,
+  active: 1,
+  released: 2,
+  completed: 2,
+  disputed: 3,
+  refunded: 5,
+  expired: 6,
+  cancelled: 7,
+};
+
 export interface CreateEscrowParams {
   depositor: string;
   beneficiary?: string;
@@ -511,73 +527,19 @@ export class ContractService {
       const projectTitle = getValue(getField("project_title"));
       const projectDescription = getValue(getField("project_description"));
 
-      // Convert status enum to number
+      // Convert status enum to number. Every contract status gets its own
+      // number: Refunded, Expired and Cancelled used to fall through to 0,
+      // so settled jobs showed as "pending" and offered actions again.
       let statusNumber = 0;
-      if (status) {
-        if (typeof status === "string") {
-          // Status is an enum like "Pending", "Active", etc.
-          switch (status.toLowerCase()) {
-            case "pending":
-              statusNumber = 0;
-              break;
-            case "inprogress":
-            case "active":
-              statusNumber = 1;
-              break;
-            case "released":
-            case "completed":
-              statusNumber = 2;
-              break;
-            case "disputed":
-              statusNumber = 3;
-              break;
-            default:
-              statusNumber = 0;
-          }
-        } else if (Array.isArray(status) && status.length > 0) {
-          // Status might be an enum array
-          const statusStr = status[0];
-          if (typeof statusStr === "string") {
-            switch (statusStr.toLowerCase()) {
-              case "pending":
-                statusNumber = 0;
-                break;
-              case "inprogress":
-              case "active":
-                statusNumber = 1;
-                break;
-              case "released":
-              case "completed":
-                statusNumber = 2;
-                break;
-              case "disputed":
-                statusNumber = 3;
-                break;
-            }
-          }
-        } else if (
-          status &&
-          typeof status === "object" &&
-          "variant" in status
-        ) {
-          // Status is an enum object with variant field
-          const variant = (status as any).variant?.toLowerCase() || "";
-          switch (variant) {
-            case "pending":
-              statusNumber = 0;
-              break;
-            case "inprogress":
-              statusNumber = 1;
-              break;
-            case "released":
-              statusNumber = 2;
-              break;
-            default:
-              statusNumber = 0;
-          }
-        } else if (typeof status === "number") {
-          statusNumber = status;
-        }
+      if (typeof status === "number") {
+        statusNumber = status;
+      } else if (status) {
+        const raw = Array.isArray(status)
+          ? status[0]
+          : typeof status === "object" && "variant" in (status as any)
+            ? (status as any).variant
+            : status;
+        statusNumber = ESCROW_STATUS_NUMBER[String(raw).toLowerCase()] ?? 0;
       }
 
       // CRITICAL: Check if escrow actually exists
@@ -1540,61 +1502,16 @@ export class ContractService {
     }
   }
 
+  /**
+   * One past the highest escrow id ever created, read from the contract's own
+   * counter. Replaces a binary search over which ids exist: that search broke
+   * on any gap left by a deleted escrow and never looked past id 50, so
+   * dashboards silently stopped listing newer jobs.
+   */
   async getNextEscrowId(): Promise<number> {
     try {
-      // WORKAROUND: Since NextEscrowId is in instance storage and hard to read directly,
-      // we'll count escrows by checking each ID until we find one that doesn't exist
-      // This is the most reliable way to get the count from the blockchain
-
-      let maxId = 0;
-      const maxChecks = 50; // Increased limit to handle more escrows
-
-      // Optimized approach: Use binary search to find the highest existing escrow ID
-      // This is much faster than checking sequentially
-      let lowerBound = 1;
-      let upperBound = maxChecks;
-
-      // Binary search to find the highest existing escrow
-      while (lowerBound <= upperBound) {
-        const mid = Math.floor((lowerBound + upperBound) / 2);
-        try {
-          const escrow = await this.getEscrow(mid);
-          if (escrow) {
-            maxId = Math.max(maxId, mid);
-            lowerBound = mid + 1; // Check higher IDs
-          } else {
-            // Escrow doesn't exist, check lower IDs
-            upperBound = mid - 1;
-          }
-        } catch (error) {
-          // Error reading escrow, assume it doesn't exist
-          upperBound = mid - 1;
-        }
-      }
-
-      // Verify by checking sequentially from maxId down to 1 to catch any gaps
-      if (maxId > 0) {
-        for (let id = maxId; id >= 1; id--) {
-          try {
-            const escrow = await this.getEscrow(id);
-            if (escrow) {
-              maxId = id; // Found the highest existing escrow
-              break;
-            }
-          } catch (error) {
-            // Continue checking lower IDs
-            continue;
-          }
-        }
-      }
-
-      // NextEscrowId = maxId + 1 (the next available ID)
-      const nextId = maxId + 1;
-      const actualCount = maxId;
-
-      return nextId;
-    } catch (error) {
-      // Return a default value if there's an error
+      return (await this.getTotalEscrows()) + 1;
+    } catch {
       return 1;
     }
   }
@@ -4463,6 +4380,117 @@ export class ContractService {
       ],
       depositor,
     );
+  }
+
+  // ─── Contract v2: decline, reopen, job manager, quotes ──────────────────────
+
+  /** Named freelancer hands the job back before starting it. */
+  async declineAssignment(
+    escrowId: number,
+    beneficiary: string,
+  ): Promise<string> {
+    if (!beneficiary) throw new Error("Wallet not connected");
+    return this.sendOwnerTransaction(
+      "decline_assignment",
+      [
+        nativeToScVal(escrowId, { type: "u32" }),
+        nativeToScVal(beneficiary, { type: "address" }),
+      ],
+      beneficiary,
+    );
+  }
+
+  /** Put a declined or arbitrated job back on the job board. */
+  async reopenJob(escrowId: number, depositor: string): Promise<string> {
+    if (!depositor) throw new Error("Wallet not connected");
+    return this.sendOwnerTransaction(
+      "reopen_job",
+      [
+        nativeToScVal(escrowId, { type: "u32" }),
+        nativeToScVal(depositor, { type: "address" }),
+      ],
+      depositor,
+    );
+  }
+
+  /** Appoint a manager who can hire, approve and reject — never get paid. */
+  async setJobManager(
+    escrowId: number,
+    manager: string,
+    depositor: string,
+  ): Promise<string> {
+    if (!depositor) throw new Error("Wallet not connected");
+    return this.sendOwnerTransaction(
+      "set_job_manager",
+      [
+        nativeToScVal(escrowId, { type: "u32" }),
+        nativeToScVal(manager, { type: "address" }),
+        nativeToScVal(depositor, { type: "address" }),
+      ],
+      depositor,
+    );
+  }
+
+  async revokeJobManager(escrowId: number, depositor: string): Promise<string> {
+    if (!depositor) throw new Error("Wallet not connected");
+    return this.sendOwnerTransaction(
+      "revoke_job_manager",
+      [
+        nativeToScVal(escrowId, { type: "u32" }),
+        nativeToScVal(depositor, { type: "address" }),
+      ],
+      depositor,
+    );
+  }
+
+  async getJobManager(escrowId: number): Promise<string | null> {
+    try {
+      const rv = await this.simulateReadonly("get_job_manager", [
+        nativeToScVal(escrowId, { type: "u32" }),
+      ]);
+      const manager = scValToNative(rv) as string | null | undefined;
+      return manager ? String(manager) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** The job has been through arbitration (enables reopen/withdraw). */
+  async isArbitrated(escrowId: number): Promise<boolean> {
+    try {
+      const rv = await this.simulateReadonly("is_arbitrated", [
+        nativeToScVal(escrowId, { type: "u32" }),
+      ]);
+      return Boolean(scValToNative(rv));
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * On-chain flags the parsed EscrowData doesn't carry: whether the job is
+   * really open (a declined job has no freelancer but is NOT open until the
+   * client reopens it) and the platform fee still held for it.
+   */
+  async getEscrowFlags(
+    escrowId: number,
+  ): Promise<{ isOpenJob: boolean; platformFee: bigint } | null> {
+    try {
+      const rv = await this.simulateReadonly("get_escrow", [
+        nativeToScVal(escrowId, { type: "u32" }),
+      ]);
+      const escrow = scValToNative(rv) as {
+        is_open_job?: boolean;
+        platform_fee?: bigint;
+      } | null;
+      if (!escrow) return null;
+      return {
+        isOpenJob: Boolean(escrow.is_open_job),
+        platformFee: BigInt(escrow.platform_fee ?? 0),
+      };
+    } catch {
+      return null;
+    }
   }
 
   async addJobFunds(

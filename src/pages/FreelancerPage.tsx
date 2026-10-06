@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 // import { Input } from "@/components/ui/input"; // Unused
 // import { Label } from "@/components/ui/label"; // Unused
+import { translateContractError } from "@/lib/web3/contract-errors";
 import { useToast } from "@/hooks/use-toast";
 // import { FreelancerHeader } from "@/components/freelancer/freelancer-header"; // Unused
 import { FreelancerStats } from "@/components/freelancer/freelancer-stats";
@@ -601,6 +602,37 @@ export default function FreelancerPage() {
 
   const handleRefresh = () => {
     fetchFreelancerEscrows(true);
+  };
+
+  /** Hand back a job you were named on, before starting it. */
+  const declineJob = async (escrowId: string) => {
+    if (!wallet.address) return;
+    if (
+      !window.confirm(
+        "Decline this job? The client keeps their funds and can name someone else or reopen it to the job board.",
+      )
+    )
+      return;
+    try {
+      toast({
+        title: "Declining job…",
+        description: "Confirm in your wallet.",
+      });
+      const { ContractService } = await import("@/lib/web3/contract-service");
+      const service = new ContractService(CONTRACTS.SECUREFLOW_ESCROW);
+      await service.declineAssignment(Number(escrowId), wallet.address);
+      toast({
+        title: "Job declined",
+        description: "The client has been notified.",
+      });
+      await fetchFreelancerEscrows();
+    } catch (error: any) {
+      toast({
+        title: "Could not decline",
+        description: translateContractError(error?.message ?? ""),
+        variant: "destructive",
+      });
+    }
   };
 
   const startWork = async (escrowId: string) => {
@@ -1214,9 +1246,7 @@ export default function FreelancerPage() {
     }
   };
 
-  const getStatusFromNumber = (
-    status: number,
-  ): "pending" | "active" | "completed" | "disputed" => {
+  const getStatusFromNumber = (status: number): Escrow["status"] => {
     switch (status) {
       case 0:
         return "pending";
@@ -1228,6 +1258,12 @@ export default function FreelancerPage() {
         return "disputed";
       case 4:
         return "active"; // Map cancelled to active
+      case 5:
+        return "refunded";
+      case 6:
+        return "expired";
+      case 7:
+        return "cancelled";
       default:
         return "pending";
     }
@@ -2390,13 +2426,28 @@ export default function FreelancerPage() {
                         {/* Actions */}
                         <div className="flex gap-3">
                           {escrow.status === "pending" && (
-                            <Button
-                              onClick={() => startWork(escrow.id)}
-                              className="flex items-center gap-2"
-                            >
-                              <Play className="h-4 w-4" />
-                              Start Work
-                            </Button>
+                            <>
+                              <Button
+                                onClick={() => startWork(escrow.id)}
+                                className="flex items-center gap-2"
+                              >
+                                <Play className="h-4 w-4" />
+                                Start Work
+                              </Button>
+                              <Button
+                                variant="outline"
+                                onClick={() => declineJob(escrow.id)}
+                              >
+                                Decline Job
+                              </Button>
+                            </>
+                          )}
+                          {(escrow.status === "cancelled" ||
+                            escrow.status === "refunded" ||
+                            escrow.status === "expired") && (
+                            <Badge variant="secondary" className="capitalize">
+                              {escrow.status}
+                            </Badge>
                           )}
                           {escrow.status === "active" && (
                             <Badge className="bg-green-100 dark:bg-green-800 text-green-800 dark:text-green-100">

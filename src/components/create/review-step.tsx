@@ -1,6 +1,8 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AlertTriangle, Clock, DollarSign, User, Zap } from "lucide-react";
+import { useEffect, useState } from "react";
 import { WHITELISTED_TOKENS } from "./project-details-step";
+import { contractService } from "@/lib/web3/contract-service";
 // Stellar doesn't use smart accounts - removed useSmartAccount import
 
 interface Milestone {
@@ -46,10 +48,22 @@ export function ReviewStep({
     Math.abs(totalMilestoneAmount - Number.parseFloat(formData.totalBudget)) <
     0.01;
 
-  const budget = Number.parseFloat(formData.totalBudget || "0");
+  // The platform fee is charged ON TOP of the budget, so the client sees the
+  // full amount leaving their wallet before confirming.
+  const [feeBp, setFeeBp] = useState<number | null>(null);
+  useEffect(() => {
+    contractService
+      .getPlatformFeeBP()
+      .then(setFeeBp)
+      .catch(() => setFeeBp(null));
+  }, []);
+
+  const budget = totalMilestoneAmount;
+  const fee = feeBp !== null ? (budget * feeBp) / 10_000 : 0;
+  const deposit = budget + fee;
   const balance = Number.parseFloat(walletBalance || "0");
   const hasInsufficientBalance =
-    formData.useNativeToken && balance > 0 && budget > balance;
+    formData.useNativeToken && balance > 0 && deposit > balance;
 
   const tokenSymbol = formData.useNativeToken
     ? "Native XLM"
@@ -129,6 +143,23 @@ export function ReviewStep({
                 {Number(formData.totalBudget || 0).toFixed(2)}
               </span>
             </div>
+            <div className="flex items-center justify-between text-sm text-muted-foreground">
+              <span>
+                Platform fee
+                {feeBp !== null ? ` (${(feeBp / 100).toFixed(2)}%)` : ""}:
+              </span>
+              <span>{feeBp !== null ? fee.toFixed(4) : "…"}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="font-medium">Total deposit:</span>
+              <span className="font-semibold">
+                {deposit.toFixed(4)} {tokenSymbol}
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              The fee is refunded in full if you cancel before work starts, and
+              in proportion to any money returned to you later.
+            </p>
             {!isTotalValid && (
               <p className="text-sm text-destructive mt-3">
                 ⚠️ Milestone amounts don't match project budget
@@ -138,7 +169,7 @@ export function ReviewStep({
               <p className="text-sm text-destructive mt-3 flex items-center gap-1">
                 <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                 Insufficient balance — you have {balance.toFixed(2)} XLM but
-                need {budget.toFixed(2)} XLM
+                need {deposit.toFixed(2)} XLM (budget + fee)
               </p>
             )}
           </div>

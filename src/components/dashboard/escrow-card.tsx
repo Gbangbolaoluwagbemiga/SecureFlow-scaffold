@@ -542,10 +542,11 @@ export function EscrowCard({
                   ))}
                 </div>
 
-                {/* Job Management — fund management + cancel (open jobs, client only) */}
+                {/* Job Management — funds, cancel, reopen, job manager (client only) */}
                 <JobManagement
                   escrowId={escrow.id}
-                  isOpenJob={isOpenJob}
+                  status={escrow.status}
+                  hasFreelancer={!isOpenJob}
                   isClient={escrow.isClient || false}
                   totalAmount={escrow.totalAmount}
                   milestones={escrow.milestones.map((m, i) => ({
