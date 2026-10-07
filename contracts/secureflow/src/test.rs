@@ -702,3 +702,55 @@ fn admin_guards() {
     t.assert_solvent();
     let _ = id;
 }
+
+// ─── Identity verification (Didit) ───────────────────────────────────────────
+
+#[test]
+fn verification_binds_one_person_to_one_wallet() {
+    let t = setup();
+    let verifier = Address::generate(&t.env);
+    let person_a = soroban_sdk::BytesN::from_array(&t.env, &[1u8; 32]);
+    let person_b = soroban_sdk::BytesN::from_array(&t.env, &[2u8; 32]);
+    let sybil = Address::generate(&t.env);
+
+    assert_eq!(
+        t.sf.try_attest_verification(&verifier, &t.freelancer, &person_a),
+        Err(Ok(err(SecureFlowError::NoVerifierSet)))
+    );
+    t.sf.set_verifier(&verifier);
+    assert_eq!(
+        t.sf.try_attest_verification(&t.client, &t.freelancer, &person_a),
+        Err(Ok(err(SecureFlowError::OnlyVerifier)))
+    );
+
+    assert!(!t.sf.is_verified(&t.freelancer));
+    t.sf.attest_verification(&verifier, &t.freelancer, &person_a);
+    assert!(t.sf.is_verified(&t.freelancer));
+    // Re-verifying the same person on the same wallet is a harmless refresh.
+    t.sf.attest_verification(&verifier, &t.freelancer, &person_a);
+
+    // The sybil: the same person tries to verify a second wallet.
+    assert_eq!(
+        t.sf.try_attest_verification(&verifier, &sybil, &person_a),
+        Err(Ok(err(SecureFlowError::DuplicateIdentity)))
+    );
+    // A verified wallet can't be re-bound to someone else.
+    assert_eq!(
+        t.sf.try_attest_verification(&verifier, &t.freelancer, &person_b),
+        Err(Ok(err(SecureFlowError::WalletBoundToOtherIdentity)))
+    );
+    assert!(!t.sf.is_verified(&sybil));
+
+    // Revoking frees the identity, so the person can move to a new wallet.
+    t.sf.revoke_verification(&verifier, &t.freelancer);
+    assert!(!t.sf.is_verified(&t.freelancer));
+    assert_eq!(
+        t.sf.try_revoke_verification(&verifier, &t.freelancer),
+        Err(Ok(err(SecureFlowError::NotVerified)))
+    );
+    t.sf.attest_verification(&verifier, &sybil, &person_a);
+    assert_eq!(
+        t.sf.get_verification(&sybil).unwrap().identity_hash,
+        person_a
+    );
+}

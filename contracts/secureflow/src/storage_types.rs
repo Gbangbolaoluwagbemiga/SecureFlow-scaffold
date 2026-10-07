@@ -1,4 +1,4 @@
-use soroban_sdk::{contracttype, Address, String, Vec};
+use soroban_sdk::{contracttype, Address, BytesN, String, Vec};
 
 // ─── Time & storage constants ────────────────────────────────────────────────
 
@@ -41,7 +41,7 @@ pub const EMERGENCY_REFUND_DELAY_LEDGERS: u32 = 30 * DAY_IN_LEDGERS;
 /// which is not about any one milestone.
 pub const OVERDUE_RESOLUTION_INDEX: u32 = u32::MAX;
 
-pub const CONTRACT_VERSION: &str = "2.0.0-arc-parity";
+pub const CONTRACT_VERSION: &str = "2.1.0-didit-verification";
 
 // ─── Errors ──────────────────────────────────────────────────────────────────
 
@@ -288,6 +288,19 @@ pub enum SecureFlowError {
     /// The token contract refused the transfer (usually: insufficient balance
     /// or missing trustline).
     TokenTransferFailed = 2700,
+
+    // ── Identity verification (2800-2899) ────────────────────────────────────
+    /// The owner has not appointed a verifier yet.
+    NoVerifierSet = 2800,
+    /// Only the appointed verifier can attest or revoke verifications.
+    OnlyVerifier = 2801,
+    /// This person is already verified on a different wallet. One human, one
+    /// verified freelancer account: this is the sybil block.
+    DuplicateIdentity = 2802,
+    /// This wallet is already verified as a different person.
+    WalletBoundToOtherIdentity = 2803,
+    /// This wallet has no verification to revoke.
+    NotVerified = 2804,
 }
 
 impl From<SecureFlowError> for soroban_sdk::Error {
@@ -435,6 +448,20 @@ pub struct OverdueRequest {
     pub requested_at: u32,
 }
 
+/// A freelancer's identity verification, attested by the verifier after a
+/// Didit check. Holds NO personal data: `identity_hash` is a salted hash of
+/// the person's normalised identity, computed off-chain with a secret salt, so
+/// it cannot be reversed — it only lets the contract notice the same person
+/// verifying a second wallet.
+#[derive(Clone, Debug)]
+#[contracttype]
+pub struct FreelancerVerification {
+    pub identity_hash: BytesN<32>,
+    /// Ledger timestamp (seconds) of the attestation.
+    pub verified_at: u64,
+    pub verifier: Address,
+}
+
 #[derive(Clone, Debug)]
 #[contracttype]
 pub struct EvidenceEntry {
@@ -502,4 +529,12 @@ pub enum DataKey {
     AverageClientRating(Address),
     UserCancellations(Address),
     LastCancellationLedger(Address),
+
+    // ── Identity verification (appended for the in-place upgrade) ──
+    /// Instance: the address allowed to attest verifications.
+    Verifier,
+    /// Persistent: wallet -> `FreelancerVerification`.
+    Verification(Address),
+    /// Persistent: identity hash -> the one wallet it is verified on.
+    IdentityBinding(BytesN<32>),
 }

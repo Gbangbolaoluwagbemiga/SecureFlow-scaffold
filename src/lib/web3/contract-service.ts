@@ -4493,6 +4493,35 @@ export class ContractService {
     }
   }
 
+  // ─── Identity verification (read from the contract) ─────────────────────
+
+  private verifiedCache = new Map<string, { value: boolean; at: number }>();
+
+  /**
+   * Is this freelancer identity-verified? The contract is the source of
+   * truth; results are cached for a minute because badges render in lists.
+   */
+  async isFreelancerVerified(address: string): Promise<boolean> {
+    if (!/^G[A-Z2-7]{55}$/.test(address)) return false;
+    const hit = this.verifiedCache.get(address);
+    if (hit && Date.now() - hit.at < 60_000) return hit.value;
+    try {
+      const rv = await this.simulateReadonly("is_verified", [
+        nativeToScVal(address, { type: "address" }),
+      ]);
+      const value = Boolean(scValToNative(rv));
+      this.verifiedCache.set(address, { value, at: Date.now() });
+      return value;
+    } catch {
+      return false;
+    }
+  }
+
+  clearVerifiedCache(address?: string) {
+    if (address) this.verifiedCache.delete(address);
+    else this.verifiedCache.clear();
+  }
+
   async addJobFunds(
     escrowId: number,
     depositor: string,

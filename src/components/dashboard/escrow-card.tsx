@@ -1,3 +1,4 @@
+import { VerifiedBadge } from "@/components/verification/verified-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -215,6 +216,9 @@ export function EscrowCard({
               </div>
             </div>
             <div className="flex items-center gap-2">
+              {escrow.isClient && !isOpenJob && (
+                <VerifiedBadge address={escrow.beneficiary} />
+              )}
               <Badge className={getStatusColor(displayStatus)}>
                 {displayStatus}
               </Badge>

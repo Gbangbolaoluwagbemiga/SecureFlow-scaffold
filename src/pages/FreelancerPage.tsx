@@ -25,6 +25,8 @@ import { Textarea } from "@/components/ui/textarea";
 // import { Input } from "@/components/ui/input"; // Unused
 // import { Label } from "@/components/ui/label"; // Unused
 import { translateContractError } from "@/lib/web3/contract-errors";
+import { VerifiedBadge } from "@/components/verification/verified-badge";
+import { IdentityVerificationCard } from "@/components/verification/identity-verification-card";
 import { useToast } from "@/hooks/use-toast";
 // import { FreelancerHeader } from "@/components/freelancer/freelancer-header"; // Unused
 import { FreelancerStats } from "@/components/freelancer/freelancer-stats";
@@ -1377,8 +1379,9 @@ export default function FreelancerPage() {
       <div className="container mx-auto px-4 py-8">
         <div className="mb-8 flex items-start justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2 flex items-center gap-3">
               Freelancer Dashboard
+              <VerifiedBadge address={wallet.address} />
             </h1>
             <p className="text-gray-600 dark:text-gray-400">
               Manage your assigned projects and track your earnings
@@ -1410,6 +1413,12 @@ export default function FreelancerPage() {
             </Button>
           </div>
         </div>
+
+        {wallet.address && (
+          <div className="mb-8">
+            <IdentityVerificationCard wallet={wallet.address} />
+          </div>
+        )}
 
         {loading ? (
           <div className="flex items-center justify-center py-12">

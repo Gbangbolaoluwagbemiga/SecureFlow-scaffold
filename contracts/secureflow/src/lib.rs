@@ -21,6 +21,7 @@ mod marketplace;
 mod ratings;
 mod refund_system;
 mod storage_types;
+mod verification;
 mod work_lifecycle;
 
 #[cfg(test)]
@@ -57,6 +58,46 @@ impl SecureFlow {
     /// Deployed implementation, readable from chain state alone.
     pub fn version(env: Env) -> String {
         String::from_str(&env, CONTRACT_VERSION)
+    }
+
+    // ─── Identity verification (Didit) ───────────────────────────────────────
+
+    /// Owner appoints the verifier key that attests Didit results.
+    pub fn set_verifier(env: Env, verifier: Address) -> Result<(), Error> {
+        Ok(verification::set_verifier(&env, verifier)?)
+    }
+
+    pub fn get_verifier(env: Env) -> Option<Address> {
+        verification::get_verifier(&env)
+    }
+
+    /// Verifier attests `wallet` as the person behind `identity_hash` (a
+    /// salted hash, no personal data). One person can verify one wallet.
+    pub fn attest_verification(
+        env: Env,
+        verifier: Address,
+        wallet: Address,
+        identity_hash: BytesN<32>,
+    ) -> Result<(), Error> {
+        Ok(verification::attest_verification(
+            &env,
+            verifier,
+            wallet,
+            identity_hash,
+        )?)
+    }
+
+    /// Verifier or owner withdraws a verification and frees the identity.
+    pub fn revoke_verification(env: Env, caller: Address, wallet: Address) -> Result<(), Error> {
+        Ok(verification::revoke_verification(&env, caller, wallet)?)
+    }
+
+    pub fn is_verified(env: Env, wallet: Address) -> bool {
+        verification::is_verified(&env, wallet)
+    }
+
+    pub fn get_verification(env: Env, wallet: Address) -> Option<FreelancerVerification> {
+        verification::get_verification(&env, wallet)
     }
 
     /// Owner replaces the contract code in place, keeping every escrow.

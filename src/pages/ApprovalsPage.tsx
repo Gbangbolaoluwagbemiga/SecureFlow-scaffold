@@ -1,3 +1,4 @@
+import { VerifiedBadge } from "@/components/verification/verified-badge";
 import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { useWeb3 } from "@/contexts/web3-context";
@@ -488,6 +489,9 @@ export default function ApprovalsPage() {
                               <p className="text-sm text-muted-foreground font-mono">
                                 {application.freelancerAddress}
                               </p>
+                              <VerifiedBadge
+                                address={application.freelancerAddress}
+                              />
                               {application.badge && (
                                 <BadgeDisplay badge={application.badge} />
                               )}
@@ -585,7 +589,12 @@ export default function ApprovalsPage() {
 
               <div className="space-y-4">
                 <div>
-                  <p className="font-medium mb-2">Freelancer Address:</p>
+                  <p className="font-medium mb-2 flex items-center gap-2">
+                    Freelancer Address:
+                    <VerifiedBadge
+                      address={selectedFreelancer.freelancerAddress}
+                    />
+                  </p>
                   <p className="text-sm text-muted-foreground font-mono break-all bg-muted/30 p-3 rounded-md">
                     {selectedFreelancer.freelancerAddress}
                   </p>

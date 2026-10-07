@@ -12,6 +12,10 @@ import { evidenceRouter } from "./routes/evidence.js";
 import { analyticsRouter } from "./routes/analytics.js";
 import { applicationsRouter } from "./routes/applications.js";
 import { getSupabase } from "./lib/supabase.js";
+import {
+  diditWebhookRouter,
+  verificationRouter,
+} from "./routes/verification.js";
 
 const app = express();
 const port = Number(process.env.PORT) || 8787;
@@ -49,7 +53,15 @@ app.use(
     credentials: true,
   }),
 );
-app.use(express.json({ limit: "10mb" }));
+app.use(
+  express.json({
+    limit: "10mb",
+    // Keep the exact bytes for webhook signatures computed over the raw body.
+    verify: (req, _res, buf) => {
+      (req as typeof req & { rawBody?: Buffer }).rawBody = buf;
+    },
+  }),
+);
 
 // General rate limiter — 60 requests per minute per IP
 const generalLimiter = rateLimit({
@@ -106,6 +118,10 @@ app.use("/v1/gasless", auth, gaslessRouter);
 app.use("/v1/evidence", auth, evidenceRouter);
 app.use("/v1/analytics", auth, analyticsRouter);
 app.use("/v1/applications", auth, applicationsRouter);
+app.use("/v1/verification", auth, verificationRouter);
+// Called by Didit, not the browser: authenticated by Didit's HMAC signature,
+// so it sits outside the API-secret check.
+app.use("/webhooks/didit", diditWebhookRouter);
 
 app.listen(port, () => {
   console.log(`secureflow-api listening on :${port}`);

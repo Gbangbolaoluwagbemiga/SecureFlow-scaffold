@@ -414,3 +414,28 @@ pub struct StuckFundsWithdrawn {
     pub amount: i128,
     pub to: Address,
 }
+
+// ─── Identity verification ───────────────────────────────────────────────────
+
+#[contractevent]
+#[derive(Clone, Debug)]
+pub struct VerifierSet {
+    #[topic]
+    pub verifier: Address,
+}
+
+/// Topics: [name, wallet] — the poller notifies the freelancer.
+#[contractevent]
+#[derive(Clone, Debug)]
+pub struct FreelancerVerified {
+    #[topic]
+    pub wallet: Address,
+}
+
+#[contractevent]
+#[derive(Clone, Debug)]
+pub struct VerificationRevoked {
+    #[topic]
+    pub wallet: Address,
+    pub revoked_by: Address,
+}
