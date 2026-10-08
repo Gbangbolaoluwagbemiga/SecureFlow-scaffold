@@ -46,17 +46,36 @@ export function MyApplications({ wallet }: { wallet: string }) {
 
   useEffect(() => {
     let cancelled = false;
-    (async () => {
-      const ids = await contractService.getFreelancerApplicationIds(wallet);
-      const escrows = await contractService.getEscrowsBatch(ids);
-      if (!cancelled) setItems(escrows.reverse()); // newest first
-    })().catch(() => !cancelled && setItems([]));
+    const load = async () => {
+      try {
+        const ids = await contractService.getFreelancerApplicationIds(wallet);
+        const escrows = await contractService.getEscrowsBatch(ids);
+        if (!cancelled) setItems(escrows.reverse()); // newest first
+      } catch {
+        if (!cancelled) setItems((prev) => prev ?? []);
+      }
+    };
+    void load();
+    // The event poller fires this when a relevant on-chain event lands
+    // (hired, filled by someone else, cancelled), so outcomes update live.
+    window.addEventListener("escrowUpdated", load);
     return () => {
       cancelled = true;
+      window.removeEventListener("escrowUpdated", load);
     };
   }, [wallet]);
 
-  if (!items || items.length === 0) return null;
+  if (!items) return null;
+  if (items.length === 0) {
+    return (
+      <Card className="glass border-primary/20 p-6 text-center text-sm text-muted-foreground">
+        You haven't applied to any jobs yet.{" "}
+        <Link to="/jobs" className="text-primary hover:underline">
+          Browse open jobs
+        </Link>
+      </Card>
+    );
+  }
 
   return (
     <Card className="glass border-primary/20 p-4">

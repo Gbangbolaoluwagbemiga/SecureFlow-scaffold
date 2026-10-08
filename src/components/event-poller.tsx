@@ -21,6 +21,7 @@ import {
   createEscrowNotification,
   createMilestoneNotification,
 } from "@/contexts/notification-context";
+import { contractService } from "@/lib/web3/contract-service";
 import {
   syncEvents,
   getStoredEvents,
@@ -331,8 +332,48 @@ export function EventPoller() {
         STATE_CHANGING_EVENTS.has(e.eventType as never),
       );
 
+      // Applicants who weren't picked: the contract addresses
+      // freelancer_accepted to the hired freelancer only, and escrow_cancelled
+      // to nobody on an open job. Anyone else who applied learns from their
+      // applications index, read lazily — only when such an event is pending.
+      let myApplications: Set<number> | null = null;
+      const appliedTo = async (escrowId: string | null) => {
+        if (escrowId === null) return false;
+        if (!myApplications) {
+          myApplications = new Set(
+            await contractService
+              .getFreelancerApplicationIds(me)
+              .catch(() => [] as number[]),
+          );
+        }
+        return myApplications.has(Number(escrowId));
+      };
+
       for (const event of stored) {
         if (event.ledger <= since || notifiedIds.has(event.id)) continue;
+
+        if (
+          (event.eventType === EVENT_TYPES.FREELANCER_ACCEPTED ||
+            event.eventType === EVENT_TYPES.ESCROW_CANCELLED) &&
+          !isAddressedTo(me, event) &&
+          (await appliedTo(getEscrowIdFromTopics(event.topics)))
+        ) {
+          const escrowId = getEscrowIdFromTopics(event.topics);
+          const filled = event.eventType === EVENT_TYPES.FREELANCER_ACCEPTED;
+          addNotification({
+            type: "application",
+            title: filled ? "Position Filled" : "Job Cancelled",
+            message: filled
+              ? `The client hired another freelancer for job #${escrowId}. Thanks for applying!`
+              : `The client cancelled job #${escrowId}, which you applied to.`,
+            actionUrl: "/freelancer?tab=applications",
+            data: { escrowId },
+          });
+          toNotify.push(event.id);
+          needsRefresh = true;
+          continue;
+        }
+
         if (!isAddressedTo(me, event)) continue;
         // escrow_created lists the creator too (topics[2]); they already got
         // a local notification when they created it.
