@@ -111,115 +111,67 @@ export default function ApprovalsPage() {
       const { ContractService } = await import("@/lib/web3/contract-service");
       const contractService = new ContractService(CONTRACTS.SECUREFLOW_ESCROW);
 
-      // Get next escrow ID from blockchain (not hardcoded)
-      const nextEscrowId = await contractService.getNextEscrowId();
+      // My escrows in one batch read (the old loop probed ids 1..20 one call
+      // at a time and never saw jobs past #20), then every open job's
+      // applications in parallel.
+      const me = (wallet.address ?? "").toLowerCase().trim();
+      const myIds = wallet.address
+        ? await contractService.getUserEscrows(wallet.address)
+        : [];
+      const escrows = await contractService.getEscrowsBatch(myIds.map(Number));
+      const myOpenJobs = escrows.filter(
+        (e) =>
+          e.creator.toLowerCase().trim() === me &&
+          !e.freelancer &&
+          e.status === 0,
+      );
+      const appsPerJob = await Promise.all(
+        myOpenJobs.map((e) =>
+          contractService.getApplications(e.escrow_id).catch(() => []),
+        ),
+      );
 
-      const myJobs: JobWithApplications[] = [];
+      const SECONDS_PER_LEDGER = 5;
+      const toTimestamp = (ledger: number) =>
+        Date.now() - (currentLedger - ledger) * SECONDS_PER_LEDGER * 1000;
 
-      // Check up to 20 escrows (reasonable limit)
-      const maxEscrowsToCheck = Math.min(nextEscrowId - 1, 20);
-      for (let i = 1; i <= maxEscrowsToCheck; i++) {
-        try {
-          const escrow = await contractService.getEscrow(i);
-
-          if (!escrow) {
-            continue;
-          }
-
-          // Check if this is my job
-          const isMyJob =
-            wallet.address &&
-            escrow.creator &&
-            escrow.creator.toLowerCase().trim() ===
-              wallet.address.toLowerCase().trim();
-
-          if (isMyJob) {
-            // Check if it's an open job (beneficiary is zero address)
-            const isOpenJob =
-              !escrow.freelancer ||
-              escrow.freelancer ===
-                "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF" ||
-              escrow.freelancer === "";
-
-            if (isOpenJob) {
-              let applicationCount = 0;
-              const applications: Application[] = [];
-
-              // Get applications from storage
-              try {
-                const apps = await contractService.getApplications(i);
-                applicationCount = apps.length;
-
-                // Convert to Application format
-                // IMPORTANT: applied_at is also a LEDGER SEQUENCE NUMBER, not a Unix timestamp!
-                // Calculate approximate timestamp: current time - (current_ledger - applied_at) * 5 seconds
-                const SECONDS_PER_LEDGER = 5;
-                for (const app of apps) {
-                  const appliedAtLedger = app.applied_at || 0;
-                  const ledgersAgo = currentLedger - appliedAtLedger;
-                  const secondsAgo = ledgersAgo * SECONDS_PER_LEDGER;
-                  const approxAppliedAt = Date.now() - secondsAgo * 1000;
-
-                  applications.push({
-                    freelancerAddress: app.freelancer,
-                    coverLetter: app.cover_letter,
-                    proposedTimeline: app.proposed_timeline,
-                    appliedAt: approxAppliedAt, // Approximate timestamp from ledger sequence
-                    status: "pending" as const,
-                    badge: app.badge,
-                    averageRating: app.averageRating,
-                    ratingCount: app.ratingCount,
-                  });
-                }
-              } catch (error) {
-                applicationCount = 0;
-              }
-
-              // IMPORTANT: created_at and deadline are LEDGER SEQUENCE NUMBERS, not timestamps!
-              // Stellar ledgers close approximately every 5 seconds
-              // Duration = (deadline - created_at) * 5 seconds
-              const SECONDS_PER_LEDGER = 5;
-              const ledgerDiff = escrow.deadline - escrow.created_at;
-              const durationInSeconds = ledgerDiff * SECONDS_PER_LEDGER;
-              const durationInDays = Math.max(
-                0,
-                durationInSeconds / (24 * 60 * 60),
-              );
-
-              // Calculate approximate timestamp: current time - (current_ledger - created_at) * 5 seconds
-              const ledgersAgo = currentLedger - escrow.created_at;
-              const secondsAgo = ledgersAgo * SECONDS_PER_LEDGER;
-              const approxCreatedAt = Date.now() - secondsAgo * 1000;
-
-              const job: JobWithApplications = {
-                id: i.toString(),
-                payer: escrow.creator,
-                beneficiary:
-                  escrow.freelancer ||
-                  "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
-                token: escrow.token || "native",
-                totalAmount: escrow.amount || "0",
-                releasedAmount: "0", // TODO: Get from escrow if available
-                status: getStatusFromNumber(escrow.status || 0),
-                createdAt: approxCreatedAt, // Approximate timestamp from ledger sequence
-                duration: durationInDays, // Duration in days (calculated correctly from ledger sequence)
-                milestones: escrow.milestones || [],
-                projectDescription:
-                  escrow.project_title ||
-                  escrow.project_description ||
-                  "No description",
-                isOpenJob: true,
-                applications,
-                applicationCount: Number(applicationCount),
-              };
-
-              myJobs.push(job);
-            }
-          }
-        } catch (error) {
-          continue;
-        }
-      }
+      const myJobs: JobWithApplications[] = myOpenJobs.map((escrow, idx) => {
+        const applications: Application[] = appsPerJob[idx].map((app) => ({
+          freelancerAddress: app.freelancer,
+          coverLetter: app.cover_letter,
+          proposedTimeline: app.proposed_timeline,
+          appliedAt: toTimestamp(app.applied_at || 0),
+          status: "pending" as const,
+          badge: app.badge,
+          averageRating: app.averageRating,
+          ratingCount: app.ratingCount,
+        }));
+        const durationInDays = Math.max(
+          0,
+          ((escrow.deadline - escrow.created_at) * SECONDS_PER_LEDGER) /
+            (24 * 60 * 60),
+        );
+        return {
+          id: escrow.escrow_id.toString(),
+          payer: escrow.creator,
+          beneficiary:
+            "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
+          token: escrow.token || "native",
+          totalAmount: escrow.amount || "0",
+          releasedAmount: "0",
+          status: getStatusFromNumber(escrow.status || 0),
+          createdAt: toTimestamp(escrow.created_at),
+          duration: durationInDays,
+          milestones: [],
+          projectDescription:
+            escrow.project_title ||
+            escrow.project_description ||
+            "No description",
+          isOpenJob: true,
+          applications,
+          applicationCount: applications.length,
+        };
+      });
 
       setJobs(myJobs);
     } catch (error) {
@@ -441,126 +393,8 @@ export default function ApprovalsPage() {
         </div>
       )}
 
-      {/* Application Review Modal */}
-      {selectedJob && (
-        <div
-          className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) {
-              setSelectedJob(null);
-              setSelectedFreelancer(null);
-            }
-          }}
-        >
-          <div
-            className="bg-background rounded-lg max-w-2xl w-full max-h-[80vh] overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold">
-                  Review Applications - {selectedJob.projectDescription}
-                </h3>
-                <button
-                  onClick={() => {
-                    setSelectedJob(null);
-                    setSelectedFreelancer(null);
-                  }}
-                  className="text-muted-foreground hover:text-foreground"
-                >
-                  ✕
-                </button>
-              </div>
-
-              {selectedJob.applications.length === 0 ? (
-                <div className="text-center py-8">
-                  <MessageSquare className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-                  <p className="text-muted-foreground">No applications yet</p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {selectedJob.applications.map((application, index) => (
-                    <Card key={index} className="p-4">
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-2 flex-wrap">
-                              <p className="font-medium">Freelancer Address:</p>
-                              <p className="text-sm text-muted-foreground font-mono">
-                                {application.freelancerAddress}
-                              </p>
-                              <VerifiedBadge
-                                address={application.freelancerAddress}
-                              />
-                              {application.badge && (
-                                <BadgeDisplay badge={application.badge} />
-                              )}
-                              {(application.averageRating !== undefined ||
-                                application.ratingCount !== undefined) && (
-                                <RatingDisplay
-                                  averageRating={application.averageRating}
-                                  ratingCount={application.ratingCount}
-                                />
-                              )}
-                            </div>
-                          </div>
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => {
-                                setSelectedJobForApproval(selectedJob); // Store job data for approval
-                                setSelectedJob(null); // Close the Application Review Modal
-                                setSelectedFreelancer(application);
-                                setIsApproving(true);
-                              }}
-                              className="px-4 py-2 bg-green-600 text-white rounded-md text-sm hover:bg-green-700 cursor-pointer"
-                            >
-                              Approve
-                            </button>
-                          </div>
-                        </div>
-
-                        <div>
-                          <p className="font-medium">Cover Letter:</p>
-                          {(() => {
-                            const { body, attachment } = parseCoverLetter(
-                              application.coverLetter ?? "",
-                            );
-                            return (
-                              <>
-                                <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-                                  {body}
-                                </p>
-                                {attachment && (
-                                  <a
-                                    href={attachment.url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="mt-2 inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
-                                  >
-                                    <Paperclip className="h-3.5 w-3.5 shrink-0" />
-                                    {attachment.name}
-                                  </a>
-                                )}
-                              </>
-                            );
-                          })()}
-                        </div>
-
-                        <div>
-                          <p className="font-medium">Proposed Timeline:</p>
-                          <p className="text-sm text-muted-foreground">
-                            {application.proposedTimeline} days
-                          </p>
-                        </div>
-                      </div>
-                    </Card>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Applications are reviewed in the job card's own dialog. A second,
+          page-level modal used to open on top of it for the same click. */}
 
       {/* Approval/Rejection Confirmation Modal */}
       {(() => {

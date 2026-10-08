@@ -14,7 +14,7 @@
  * the same event is never toasted twice, even across page reloads.
  */
 
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { useWeb3 } from "@/contexts/web3-context";
 import {
   useNotifications,
@@ -23,14 +23,16 @@ import {
 } from "@/contexts/notification-context";
 import {
   syncEvents,
+  getStoredEvents,
   IndexedEvent,
   EVENT_TYPES,
 } from "@/lib/web3/event-indexer";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const POLL_INTERVAL_MS = 60_000; // 60 seconds
+const POLL_INTERVAL_MS = 30_000; // 30 seconds
 const NOTIFIED_KEY = "secureflow_notified_event_ids";
+const SINCE_KEY = "secureflow_notify_since_ledger";
 const MAX_NOTIFIED_IDS = 2000;
 
 /** Event types that should trigger an `escrowUpdated` DOM event */
@@ -58,21 +60,47 @@ const STATE_CHANGING_EVENTS = new Set([
 
 // ─── Dedup helpers ────────────────────────────────────────────────────────────
 
-function getNotifiedIds(): Set<string> {
+// All bookkeeping is PER WALLET. It used to be shared by every wallet in the
+// browser: an event seen while one wallet was connected counted as "already
+// notified" for every other wallet, so switching wallets lost notifications.
+
+function getNotifiedIds(wallet: string): Set<string> {
   try {
-    const raw = localStorage.getItem(NOTIFIED_KEY);
+    const raw = localStorage.getItem(`${NOTIFIED_KEY}_${wallet}`);
     return new Set<string>(raw ? JSON.parse(raw) : []);
   } catch {
     return new Set<string>();
   }
 }
 
-function markNotified(ids: string[]): void {
+function markNotified(wallet: string, ids: string[]): void {
   if (ids.length === 0) return;
-  const existing = getNotifiedIds();
+  const existing = getNotifiedIds(wallet);
   ids.forEach((id) => existing.add(id));
   const arr = Array.from(existing).slice(-MAX_NOTIFIED_IDS);
-  localStorage.setItem(NOTIFIED_KEY, JSON.stringify(arr));
+  try {
+    localStorage.setItem(`${NOTIFIED_KEY}_${wallet}`, JSON.stringify(arr));
+  } catch {
+    // storage full or blocked: worst case a notification repeats
+  }
+}
+
+/**
+ * The ledger after which this wallet should hear about events. Set the first
+ * time the wallet is seen in this browser, so its old history isn't replayed —
+ * but anything that happens after that is delivered, even if it happened
+ * while a different wallet was connected.
+ */
+function getNotifySince(wallet: string, fallback: number): number {
+  const key = `${SINCE_KEY}_${wallet}`;
+  try {
+    const stored = localStorage.getItem(key);
+    if (stored) return Number(stored);
+    localStorage.setItem(key, String(fallback));
+  } catch {
+    // no storage: notify from now
+  }
+  return fallback;
 }
 
 // ─── Topic helpers ────────────────────────────────────────────────────────────
@@ -268,7 +296,6 @@ function buildNotification(
 export function EventPoller() {
   const { wallet } = useWeb3();
   const { addNotification } = useNotifications();
-  const isFirstPollRef = useRef(true);
 
   useEffect(() => {
     if (!wallet.address) return;
@@ -279,6 +306,7 @@ export function EventPoller() {
     const poll = async () => {
       if (document.visibilityState === "hidden") return;
 
+      const me = wallet.address!;
       let newEvents: IndexedEvent[];
       try {
         newEvents = await syncEvents();
@@ -286,52 +314,45 @@ export function EventPoller() {
         return;
       }
 
-      if (newEvents.length === 0) return;
-
-      // On first poll after connecting, don't spam notifications for old events —
-      // just index them silently and dispatch a refresh.
-      if (isFirstPollRef.current) {
-        isFirstPollRef.current = false;
-        // Still dispatch a refresh so dashboards pick up any missed state changes
-        if (
-          newEvents.some((e) => STATE_CHANGING_EVENTS.has(e.eventType as never))
-        ) {
-          dispatchRefresh();
-        }
-        // Mark all as "already notified" so they don't fire on next poll either
-        markNotified(newEvents.map((e) => e.id));
-        return;
-      }
-
-      const notifiedIds = getNotifiedIds();
+      // Judge against everything indexed, not just this poll's batch: events
+      // fetched while another wallet was connected still count for this one.
+      const stored = getStoredEvents();
+      const newestLedger = stored.reduce((m, e) => Math.max(m, e.ledger), 0);
+      // A wallet seen for the first time catches up on its last day, so a
+      // job application that landed while it wasn't connected still shows.
+      const ONE_DAY_LEDGERS = 17_280;
+      const since = getNotifySince(
+        me,
+        Math.max(0, newestLedger - ONE_DAY_LEDGERS),
+      );
+      const notifiedIds = getNotifiedIds(me);
       const toNotify: string[] = [];
-      let needsRefresh = false;
+      let needsRefresh = newEvents.some((e) =>
+        STATE_CHANGING_EVENTS.has(e.eventType as never),
+      );
 
-      for (const event of newEvents) {
-        if (notifiedIds.has(event.id)) continue;
-
-        // Only notify if the current user's address is involved
-        if (!isAddressedTo(wallet.address!, event)) continue;
+      for (const event of stored) {
+        if (event.ledger <= since || notifiedIds.has(event.id)) continue;
+        if (!isAddressedTo(me, event)) continue;
         // escrow_created lists the creator too (topics[2]); they already got
         // a local notification when they created it.
         if (
           event.eventType === EVENT_TYPES.ESCROW_CREATED &&
-          event.topics[2] === wallet.address
-        )
-          continue;
-
-        const notification = buildNotification(event);
-        if (notification) {
-          addNotification(notification);
+          event.topics[2] === me
+        ) {
           toNotify.push(event.id);
+          continue;
         }
 
+        const notification = buildNotification(event);
+        if (notification) addNotification(notification);
+        toNotify.push(event.id);
         if (STATE_CHANGING_EVENTS.has(event.eventType as never)) {
           needsRefresh = true;
         }
       }
 
-      if (toNotify.length > 0) markNotified(toNotify);
+      if (toNotify.length > 0) markNotified(me, toNotify);
       if (needsRefresh) dispatchRefresh();
     };
 

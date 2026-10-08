@@ -44,8 +44,8 @@ export interface IndexedEvent {
 
 const EVENTS_STORAGE_KEY = "secureflow_indexed_events";
 const CURSOR_STORAGE_KEY = "secureflow_event_cursor";
-/** How many ledgers to look back on first run (~25 minutes of Stellar history) */
-const INITIAL_LOOKBACK = 1000;
+/** How many ledgers to look back on first run (~1 day, matching the poller's catch-up window) */
+const INITIAL_LOOKBACK = 17_280;
 /** Max events to keep in localStorage (oldest get pruned) */
 const MAX_STORED_EVENTS = 1000;
 
