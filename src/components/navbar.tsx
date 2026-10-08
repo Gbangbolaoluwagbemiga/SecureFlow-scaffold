@@ -74,12 +74,16 @@ export function Navbar() {
         <div className="container mx-auto px-4 h-16 flex items-center justify-between gap-2">
           <Link to="/" className="flex items-center gap-2 font-bold text-xl">
             <img
-              src="/secureflow-favicon.svg"
+              src="/secureflow-logo.svg"
               alt="SecureFlow"
-              className="h-7 w-7 shrink-0"
+              className="h-8 w-8 shrink-0"
             />
-            <span className="bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-              SecureFlow
+            {/* Matches the mark: "Secure" steady, "Flow" in the current's gradient. */}
+            <span className="tracking-tight">
+              Secure
+              <span className="bg-gradient-to-r from-[#3B82F6] to-[#22D3EE] bg-clip-text text-transparent">
+                Flow
+              </span>
             </span>
           </Link>
 

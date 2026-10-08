@@ -1,27 +1,14 @@
-<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+<!-- SecureFlow mark, favicon cut: heavier stroke and tighter margins so it
+     stays legible at 16px. Same geometry as secureflow-logo.svg. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="4 4 56 56" fill="none">
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#3B82F6"/>
-      <stop offset="100%" stop-color="#1D4ED8"/>
-    </linearGradient>
-    <linearGradient id="accent" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#10B981"/>
-      <stop offset="100%" stop-color="#059669"/>
+    <linearGradient id="sf-ink" x1="13" y1="48" x2="51" y2="17" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#3B82F6"/>
+      <stop offset="1" stop-color="#22D3EE"/>
     </linearGradient>
   </defs>
-
-  <!-- Background rounded square -->
-  <rect width="32" height="32" rx="7" fill="url(#bg)"/>
-
-  <!-- Shield outline -->
-  <path d="M16 4L24 7.5V16C24 21.3 20.5 25.8 16 28C11.5 25.8 8 21.3 8 16V7.5L16 4Z"
-        fill="white" fill-opacity="0.18" stroke="white" stroke-opacity="0.5" stroke-width="1.2"/>
-
-  <!-- S letter -->
-  <path d="M12.5 12.5C12.5 11.4 13.4 10.5 14.5 10.5H17C18.1 10.5 19 11.4 19 12.5C19 13.6 18.1 14.5 17 14.5H15C13.9 14.5 13 15.4 13 16.5C13 17.6 13.9 18.5 15 18.5H17.5C18.6 18.5 19.5 17.6 19.5 16.5"
-        stroke="white" stroke-width="1.8" stroke-linecap="round" fill="none"/>
-
-  <!-- Checkmark / flow tick -->
-  <path d="M11 21L13.5 23.5L21 17"
-        stroke="url(#accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <rect x="4" y="4" width="56" height="56" rx="13" fill="#0B1222"/>
+  <path d="M13.2 43.2C16.6 48.6 30.2 49.4 30.2 40.6C30.2 32.4 13.6 33.6 13.6 25C13.6 16.8 24.2 15.6 29.4 17.4L51 17.4" stroke="url(#sf-ink)" stroke-width="6.4" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M37.6 17.4V48" stroke="url(#sf-ink)" stroke-width="6.4" stroke-linecap="round"/>
+  <path d="M37.6 32.6H45.2" stroke="#FFFFFF" stroke-width="6.4" stroke-linecap="round"/>
 </svg>

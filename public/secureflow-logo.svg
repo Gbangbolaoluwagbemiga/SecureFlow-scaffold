@@ -1,36 +1,19 @@
-<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <!-- Background circle with gradient -->
+<!--
+  SecureFlow mark.
+  One continuous stroke: the S flows straight into the F's top bar — funds in
+  motion resolving into a straight, secured line. The F's middle bar is the one
+  solid white step: a released milestone.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
   <defs>
-    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#3B82F6;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#1D4ED8;stop-opacity:1" />
-    </linearGradient>
-    <linearGradient id="shieldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#FFFFFF;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#E5E7EB;stop-opacity:1" />
-    </linearGradient>
-    <linearGradient id="flowGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#10B981;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#059669;stop-opacity:1" />
+    <linearGradient id="sf-ink" x1="13" y1="48" x2="51" y2="17" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#3B82F6"/>
+      <stop offset="1" stop-color="#22D3EE"/>
     </linearGradient>
   </defs>
-  
-  <!-- Background circle -->
-  <circle cx="16" cy="16" r="16" fill="url(#bgGradient)"/>
-  
-  <!-- Shield shape -->
-  <path d="M16 4L22 8V16C22 20.4183 18.4183 24 14 24C9.58172 24 6 20.4183 6 16V8L12 4L16 4Z" fill="url(#shieldGradient)" stroke="#1D4ED8" stroke-width="0.5"/>
-  
-  <!-- Inner shield -->
-  <path d="M16 6L20 9V16C20 19.3137 17.3137 22 14 22C10.6863 22 8 19.3137 8 16V9L12 6L16 6Z" fill="none" stroke="#3B82F6" stroke-width="1"/>
-  
-  <!-- Flow arrows -->
-  <path d="M10 12L14 16L10 20" stroke="url(#flowGradient)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-  <path d="M18 12L22 16L18 20" stroke="url(#flowGradient)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-  
-  <!-- Central dot -->
-  <circle cx="16" cy="16" r="2" fill="url(#flowGradient)"/>
-  
-  <!-- Security checkmark -->
-  <path d="M12 14L14 16L20 10" stroke="#10B981" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <rect width="64" height="64" rx="15" fill="#0B1222"/>
+  <rect x=".5" y=".5" width="63" height="63" rx="14.5" stroke="#1E293B"/>
+  <path d="M13.2 43.2C16.6 48.6 30.2 49.4 30.2 40.6C30.2 32.4 13.6 33.6 13.6 25C13.6 16.8 24.2 15.6 29.4 17.4L51 17.4" stroke="url(#sf-ink)" stroke-width="5.4" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M37.6 17.4V48" stroke="url(#sf-ink)" stroke-width="5.4" stroke-linecap="round"/>
+  <path d="M37.6 32.6H45.2" stroke="#FFFFFF" stroke-width="5.4" stroke-linecap="round"/>
 </svg>
