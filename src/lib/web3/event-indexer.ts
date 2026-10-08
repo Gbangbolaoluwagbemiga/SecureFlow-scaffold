@@ -115,12 +115,30 @@ function normaliseEventType(raw: string): string {
 
 // ─── ScVal decoder ─────────────────────────────────────────────────────────────
 
+/**
+ * BigInt → string at EVERY depth, so events survive JSON serialisation.
+ *
+ * Contract events carry i128 amounts inside their data maps (e.g.
+ * `escrow_created.total_amount`). Converting only a top-level BigInt left the
+ * nested ones in place, JSON.stringify threw while storing them, and because
+ * that happened before the cursor advanced, every poll retried the same page
+ * and failed: the indexer — and every on-chain notification — stalled for
+ * good at the first event with an amount in it.
+ */
+function toJsonSafe(value: unknown): unknown {
+  if (typeof value === "bigint") return value.toString();
+  if (Array.isArray(value)) return value.map(toJsonSafe);
+  if (value && typeof value === "object" && value.constructor === Object) {
+    return Object.fromEntries(
+      Object.entries(value).map(([k, v]) => [k, toJsonSafe(v)]),
+    );
+  }
+  return value;
+}
+
 function decodeScVal(val: xdr.ScVal): unknown {
   try {
-    const native = scValToNative(val);
-    // BigInt → string so it survives JSON serialisation
-    if (typeof native === "bigint") return native.toString();
-    return native;
+    return toJsonSafe(scValToNative(val));
   } catch {
     return null;
   }

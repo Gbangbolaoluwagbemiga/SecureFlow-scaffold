@@ -7,13 +7,22 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useWeb3 } from "@/contexts/web3-context";
-import { useState } from "react";
 import { Copy, LogOut, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
+/** Two hues derived from the address → a stable, distinct gradient. */
+function identicon(address: string): string {
+  let h = 0;
+  for (let i = 0; i < address.length; i++) {
+    h = (h * 31 + address.charCodeAt(i)) >>> 0;
+  }
+  const a = h % 360;
+  const b = (a + 40 + ((h >>> 9) % 140)) % 360;
+  return `linear-gradient(135deg, hsl(${a} 75% 55%), hsl(${b} 70% 45%))`;
+}
+
 export function WalletButton() {
   const { wallet, connectWallet, disconnectWallet, refreshBalance } = useWeb3();
-  const [walletIconError, setWalletIconError] = useState(false);
   const { toast } = useToast();
 
   const handleConnect = () => {
@@ -89,19 +98,14 @@ export function WalletButton() {
           aria-label={`Wallet ${short}, ${balanceFull} XLM`}
           className="flex items-center gap-2 h-9 rounded-full px-2 sm:pl-1.5 sm:pr-3 bg-muted/50 hover:bg-muted/70 border border-border/40"
         >
-          <span className="w-6 h-6 rounded-full overflow-hidden shrink-0">
-            {!walletIconError ? (
-              <img
-                src={`https://effigy.im/a/${wallet.address}.svg`}
-                alt=""
-                aria-hidden="true"
-                className="w-full h-full object-cover"
-                onError={() => setWalletIconError(true)}
-              />
-            ) : (
-              <span className="block w-full h-full bg-linear-to-br from-blue-400 to-blue-600 rounded-full" />
-            )}
-          </span>
+          {/* Identicon generated locally from the address: no third-party
+              image request (which also leaked the address), and it always
+              renders. Changes the instant you switch accounts. */}
+          <span
+            aria-hidden="true"
+            className="w-6 h-6 rounded-full shrink-0 ring-1 ring-border/60"
+            style={{ background: identicon(wallet.address) }}
+          />
           <span className="hidden sm:inline text-sm font-medium tabular-nums">
             {balanceShort}{" "}
             <span className="text-muted-foreground font-normal">XLM</span>
