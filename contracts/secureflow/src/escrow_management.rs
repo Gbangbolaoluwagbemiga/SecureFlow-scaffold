@@ -128,6 +128,9 @@ pub fn create_escrow(
     save_new_milestones(env, escrow_id, &milestones);
 
     core::add_user_escrow(env, depositor.clone(), escrow_id);
+    if is_open_job {
+        core::open_jobs_add(env, escrow_id);
+    }
     if let Some(b) = &beneficiary {
         core::add_user_escrow(env, b.clone(), escrow_id);
     }
@@ -467,6 +470,7 @@ pub fn cancel_job(env: &Env, escrow_id: u32, depositor: Address) -> SfResult<()>
     );
 
     escrow.status = EscrowStatus::Cancelled;
+    core::open_jobs_remove(env, escrow_id);
     escrow.platform_fee = 0;
     core::save_escrow(env, escrow_id, &escrow);
     core::liabilities_sub(env, escrow.token.as_ref(), held)?;
@@ -568,6 +572,7 @@ pub fn reopen_job(env: &Env, escrow_id: u32, depositor: Address) -> SfResult<()>
     escrow.is_open_job = true;
     escrow.work_started = false;
     escrow.status = EscrowStatus::Pending;
+    core::open_jobs_add(env, escrow_id);
     core::save_escrow(env, escrow_id, &escrow);
 
     events::JobReopened {

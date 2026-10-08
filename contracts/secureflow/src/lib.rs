@@ -659,6 +659,59 @@ impl SecureFlow {
         escrow_core::get_escrow(&env, escrow_id)
     }
 
+    /// Ids of jobs open for applications right now (kept by the contract, so
+    /// clients don't scan every escrow ever created).
+    pub fn get_open_jobs(env: Env) -> Vec<u32> {
+        escrow_core::get_open_jobs(&env)
+    }
+
+    /// Read up to 50 escrows in one call. Missing ids are skipped.
+    pub fn get_escrows(env: Env, escrow_ids: Vec<u32>) -> Result<Vec<(u32, EscrowData)>, Error> {
+        if escrow_ids.len() > MAX_BATCH_READ {
+            return Err(SecureFlowError::InvalidParameter.into());
+        }
+        let mut out = Vec::new(&env);
+        for id in escrow_ids.iter() {
+            if let Some(escrow) = escrow_core::get_escrow(&env, id) {
+                out.push_back((id, escrow));
+            }
+        }
+        Ok(out)
+    }
+
+    /// Escrow ids this freelancer has applied to.
+    pub fn get_freelancer_applications(env: Env, freelancer: Address) -> Vec<u32> {
+        escrow_core::get_freelancer_applications(&env, freelancer)
+    }
+
+    /// Owner backfill for escrows created before the indexes existed: lists
+    /// open jobs and records applications for ids in `[from_id, to_id]`
+    /// (at most 50 per call). Safe to repeat.
+    pub fn rebuild_indexes(env: Env, from_id: u32, to_id: u32) -> Result<u32, Error> {
+        admin::require_owner(&env)?;
+        if to_id < from_id || to_id - from_id >= MAX_BATCH_READ {
+            return Err(SecureFlowError::InvalidParameter.into());
+        }
+        let mut listed = 0u32;
+        for id in from_id..=to_id {
+            let Some(escrow) = escrow_core::get_escrow(&env, id) else {
+                continue;
+            };
+            if escrow_core::is_listed_open(&escrow) {
+                escrow_core::open_jobs_add(&env, id);
+                listed += 1;
+            } else {
+                escrow_core::open_jobs_remove(&env, id);
+            }
+            let applicants: Vec<Address> =
+                escrow_core::p_get(&env, &DataKey::Applicants(id)).unwrap_or(Vec::new(&env));
+            for a in applicants.iter() {
+                escrow_core::freelancer_applications_add(&env, a, id);
+            }
+        }
+        Ok(listed)
+    }
+
     pub fn get_milestone(env: Env, escrow_id: u32, milestone_index: u32) -> Option<Milestone> {
         work_lifecycle::get_milestone(&env, escrow_id, milestone_index)
     }

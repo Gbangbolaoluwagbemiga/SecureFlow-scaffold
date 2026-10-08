@@ -754,3 +754,41 @@ fn verification_binds_one_person_to_one_wallet() {
         person_a
     );
 }
+
+// ─── Read indexes ────────────────────────────────────────────────────────────
+
+#[test]
+fn open_jobs_and_applications_index_follow_the_job() {
+    let t = setup();
+    let open = t.create(None, Vec::new(&t.env), 1, &[100]);
+    let direct = t.direct(&[100]);
+    assert_eq!(t.sf.get_open_jobs(), vec![&t.env, open]); // direct jobs aren't listed
+
+    t.sf.apply_to_job(&open, &s(&t.env, "me"), &1, &t.freelancer);
+    assert_eq!(t.sf.get_freelancer_applications(&t.freelancer), vec![&t.env, open]);
+
+    t.sf.accept_freelancer(&open, &t.freelancer, &t.client);
+    assert!(t.sf.get_open_jobs().is_empty()); // hired: no longer open
+
+    t.sf.decline_assignment(&open, &t.freelancer);
+    assert!(t.sf.get_open_jobs().is_empty()); // declined isn't open until reopened
+    t.sf.reopen_job(&open, &t.client);
+    assert_eq!(t.sf.get_open_jobs(), vec![&t.env, open]);
+
+    t.sf.cancel_job(&open, &t.client);
+    assert!(t.sf.get_open_jobs().is_empty());
+
+    // Batch read: one call, missing ids skipped, capped at 50.
+    let got = t.sf.get_escrows(&vec![&t.env, open, direct, 999]);
+    assert_eq!(got.len(), 2);
+    assert_eq!(got.get(1).unwrap().0, direct);
+    let mut too_many = Vec::new(&t.env);
+    for i in 0..51u32 {
+        too_many.push_back(i);
+    }
+    assert_eq!(t.sf.try_get_escrows(&too_many), Err(Ok(err(SecureFlowError::InvalidParameter))));
+
+    // Backfill is idempotent and owner-only.
+    assert_eq!(t.sf.rebuild_indexes(&1, &10), 0);
+    assert_eq!(t.sf.get_freelancer_applications(&t.freelancer), vec![&t.env, open]);
+}

@@ -27,6 +27,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { translateContractError } from "@/lib/web3/contract-errors";
 import { VerifiedBadge } from "@/components/verification/verified-badge";
 import { IdentityVerificationCard } from "@/components/verification/identity-verification-card";
+import { MyApplications } from "@/components/freelancer/my-applications";
 import { useToast } from "@/hooks/use-toast";
 // import { FreelancerHeader } from "@/components/freelancer/freelancer-header"; // Unused
 import { FreelancerStats } from "@/components/freelancer/freelancer-stats";
@@ -1415,8 +1416,9 @@ export default function FreelancerPage() {
         </div>
 
         {wallet.address && (
-          <div className="mb-8">
+          <div className="mb-8 space-y-4">
             <IdentityVerificationCard wallet={wallet.address} />
+            <MyApplications wallet={wallet.address} />
           </div>
         )}
 

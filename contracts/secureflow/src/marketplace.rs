@@ -60,6 +60,7 @@ pub fn apply_to_job(
         },
     );
     list.push_back(freelancer.clone());
+    core::freelancer_applications_add(env, freelancer.clone(), escrow_id);
     core::p_set(env, &DataKey::Applicants(escrow_id), &list);
 
     events::ApplicationSubmitted {
@@ -118,6 +119,7 @@ pub fn accept_freelancer(
 
     escrow.beneficiary = Some(freelancer.clone());
     escrow.is_open_job = false;
+    core::open_jobs_remove(env, escrow_id);
     core::save_escrow(env, escrow_id, &escrow);
     core::add_user_escrow(env, freelancer.clone(), escrow_id);
 

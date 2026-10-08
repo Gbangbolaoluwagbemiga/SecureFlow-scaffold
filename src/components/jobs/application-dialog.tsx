@@ -166,9 +166,17 @@ export function ApplicationDialog({
         setUploadedFile(result);
         fileUrl = result.url;
       } catch (e) {
+        const raw = e instanceof Error ? e.message : "";
+        // "fetch failed" comes from the backend when its file storage
+        // (Supabase) is unreachable; the application itself would still work.
+        const storageDown = /fetch failed|not configured|503|storage/i.test(
+          raw,
+        );
         toast({
-          title: "Upload failed",
-          description: e instanceof Error ? e.message : "Could not upload file",
+          title: "Attachment couldn't be uploaded",
+          description: storageDown
+            ? "File storage is unavailable right now. Remove the attachment to apply without it, or try again later."
+            : raw || "Could not upload the file. Please try again.",
           variant: "destructive",
         });
         setUploading(false);

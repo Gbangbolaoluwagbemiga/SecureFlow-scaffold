@@ -41,7 +41,11 @@ pub const EMERGENCY_REFUND_DELAY_LEDGERS: u32 = 30 * DAY_IN_LEDGERS;
 /// which is not about any one milestone.
 pub const OVERDUE_RESOLUTION_INDEX: u32 = u32::MAX;
 
-pub const CONTRACT_VERSION: &str = "2.1.0-didit-verification";
+pub const CONTRACT_VERSION: &str = "2.2.0-indexes";
+
+/// Most escrows one `get_escrows` call returns. Each is one ledger read, and a
+/// simulation may read at most ~200 entries.
+pub const MAX_BATCH_READ: u32 = 50;
 
 // ─── Errors ──────────────────────────────────────────────────────────────────
 
@@ -537,4 +541,13 @@ pub enum DataKey {
     Verification(Address),
     /// Persistent: identity hash -> the one wallet it is verified on.
     IdentityBinding(BytesN<32>),
+
+    // ── Read indexes (appended in 2.2.0) ──
+    // The contract keeps these so a browser can list jobs in one or two calls
+    // instead of reading every escrow ever created, one network round-trip
+    // each. Stellar has no subgraph; this is the index.
+    /// Persistent: ids of jobs currently open for applications.
+    OpenJobs,
+    /// Persistent: freelancer -> escrow ids they have applied to.
+    FreelancerApplications(Address),
 }

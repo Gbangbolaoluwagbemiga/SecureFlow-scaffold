@@ -180,6 +180,55 @@ pub fn remove_user_escrow(env: &Env, user: Address, escrow_id: u32) {
     }
 }
 
+// ─── Read indexes ────────────────────────────────────────────────────────────
+
+pub fn get_open_jobs(env: &Env) -> Vec<u32> {
+    p_get(env, &DataKey::OpenJobs).unwrap_or(Vec::new(env))
+}
+
+pub fn open_jobs_add(env: &Env, escrow_id: u32) {
+    let mut list = get_open_jobs(env);
+    if !list.contains(escrow_id) {
+        list.push_back(escrow_id);
+        p_set(env, &DataKey::OpenJobs, &list);
+    }
+}
+
+pub fn open_jobs_remove(env: &Env, escrow_id: u32) {
+    let mut list = get_open_jobs(env);
+    if let Some(pos) = list.first_index_of(escrow_id) {
+        list.remove(pos);
+        p_set(env, &DataKey::OpenJobs, &list);
+    }
+}
+
+pub fn get_freelancer_applications(env: &Env, freelancer: Address) -> Vec<u32> {
+    p_get(env, &DataKey::FreelancerApplications(freelancer)).unwrap_or(Vec::new(env))
+}
+
+pub fn freelancer_applications_add(env: &Env, freelancer: Address, escrow_id: u32) {
+    let key = DataKey::FreelancerApplications(freelancer);
+    let mut list: Vec<u32> = p_get(env, &key).unwrap_or(Vec::new(env));
+    if !list.contains(escrow_id) {
+        list.push_back(escrow_id);
+        p_set(env, &key, &list);
+    }
+}
+
+pub fn freelancer_applications_remove(env: &Env, freelancer: Address, escrow_id: u32) {
+    let key = DataKey::FreelancerApplications(freelancer);
+    let mut list: Vec<u32> = p_get(env, &key).unwrap_or(Vec::new(env));
+    if let Some(pos) = list.first_index_of(escrow_id) {
+        list.remove(pos);
+        p_set(env, &key, &list);
+    }
+}
+
+/// Is this escrow taking applications right now?
+pub fn is_listed_open(escrow: &EscrowData) -> bool {
+    escrow.is_open_job && escrow.beneficiary.is_none() && escrow.status == EscrowStatus::Pending
+}
+
 pub fn get_reputation(env: &Env, user: Address) -> u32 {
     p_get(env, &DataKey::Reputation(user)).unwrap_or(0)
 }

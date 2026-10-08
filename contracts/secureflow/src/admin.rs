@@ -389,8 +389,10 @@ pub fn delete_escrow(env: &Env, escrow_id: u32) -> SfResult<()> {
     let applicants: Vec<Address> =
         escrow_core::p_get(env, &DataKey::Applicants(escrow_id)).unwrap_or(Vec::new(env));
     for a in applicants.iter() {
-        escrow_core::p_remove(env, &DataKey::Application(escrow_id, a));
+        escrow_core::p_remove(env, &DataKey::Application(escrow_id, a.clone()));
+        escrow_core::freelancer_applications_remove(env, a, escrow_id);
     }
+    escrow_core::open_jobs_remove(env, escrow_id);
     for key in [
         DataKey::Applicants(escrow_id),
         DataKey::JobManager(escrow_id),

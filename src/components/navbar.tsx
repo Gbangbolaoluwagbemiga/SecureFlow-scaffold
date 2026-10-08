@@ -6,7 +6,6 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useFreelancerStatus } from "@/hooks/use-freelancer-status";
 import { useAdminStatus } from "@/hooks/use-admin-status";
 import { useJobCreatorStatus } from "@/hooks/use-job-creator-status";
 import { usePendingApprovals } from "@/hooks/use-pending-approvals";
@@ -17,11 +16,14 @@ export function Navbar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const mobileMenuRef = useRef<HTMLDivElement>(null);
 
-  const { isFreelancer } = useFreelancerStatus();
+  // Every connected wallet can reach the freelancer area: a new freelancer
+  // needs it to get identity-verified BEFORE anyone hires them. (It used to
+  // appear only after being hired, found by scanning escrows on every load.)
+  const { wallet } = useWeb3();
+  const isFreelancer = wallet.isConnected;
   const { isAdmin } = useAdminStatus();
   const { isJobCreator } = useJobCreatorStatus();
   const { hasPendingApprovals } = usePendingApprovals();
-  useWeb3();
 
   const isActive = (path: string) => {
     if (path === "/") {

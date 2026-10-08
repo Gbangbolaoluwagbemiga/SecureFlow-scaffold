@@ -32,6 +32,8 @@ export interface EscrowData {
   milestones?: any[];
   project_title?: string;
   project_description?: string;
+  /** Present when read through getEscrowsBatch. */
+  is_open_job?: boolean;
 }
 
 /**
@@ -4520,6 +4522,70 @@ export class ContractService {
   clearVerifiedCache(address?: string) {
     if (address) this.verifiedCache.delete(address);
     else this.verifiedCache.clear();
+  }
+
+  // ─── Contract indexes (one or two calls instead of one per escrow) ───────
+
+  /** Ids of jobs open for applications, maintained by the contract. */
+  async getOpenJobIds(): Promise<number[]> {
+    try {
+      const rv = await this.simulateReadonly("get_open_jobs");
+      return ((scValToNative(rv) as number[]) ?? []).map(Number);
+    } catch {
+      return [];
+    }
+  }
+
+  /** Escrow ids this freelancer has applied to. */
+  async getFreelancerApplicationIds(freelancer: string): Promise<number[]> {
+    try {
+      const rv = await this.simulateReadonly("get_freelancer_applications", [
+        nativeToScVal(freelancer, { type: "address" }),
+      ]);
+      return ((scValToNative(rv) as number[]) ?? []).map(Number);
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Read many escrows in as few calls as possible (the contract returns up to
+   * 50 per call). Same shape as getEscrow; missing ids are skipped.
+   */
+  async getEscrowsBatch(ids: number[]): Promise<EscrowData[]> {
+    const BATCH = 50;
+    const chunks: number[][] = [];
+    for (let i = 0; i < ids.length; i += BATCH) {
+      chunks.push(ids.slice(i, i + BATCH));
+    }
+    const results = await Promise.all(
+      chunks.map(async (chunk) => {
+        const rv = await this.simulateReadonly("get_escrows", [
+          xdr.ScVal.scvVec(
+            chunk.map((id) => nativeToScVal(id, { type: "u32" })),
+          ),
+        ]);
+        return (scValToNative(rv) as [number, any][]) ?? [];
+      }),
+    );
+    return results.flat().map(([id, e]) => {
+      const rawStatus = Array.isArray(e.status) ? e.status[0] : e.status;
+      return {
+        escrow_id: Number(id),
+        creator: String(e.depositor ?? ""),
+        freelancer: e.beneficiary ? String(e.beneficiary) : undefined,
+        status: ESCROW_STATUS_NUMBER[String(rawStatus).toLowerCase()] ?? 0,
+        token: e.token ? String(e.token) : undefined,
+        amount: String(e.total_amount ?? "0"),
+        paid_amount: String(e.paid_amount ?? "0"),
+        deadline: Number(e.deadline ?? 0),
+        created_at: Number(e.created_at ?? 0),
+        milestones: [],
+        project_title: String(e.project_title ?? ""),
+        project_description: String(e.project_description ?? ""),
+        is_open_job: Boolean(e.is_open_job),
+      };
+    });
   }
 
   async addJobFunds(
