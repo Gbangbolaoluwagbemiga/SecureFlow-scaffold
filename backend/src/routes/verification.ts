@@ -2,6 +2,7 @@ import { Router, type Request } from "express";
 import {
   attestOnChain,
   createDiditSession,
+  fetchDiditDecision,
   identityHashFromDecision,
   isDiditConfigured,
   isVerifiedOnChain,
@@ -24,11 +25,86 @@ type VerificationState =
   | "duplicate_identity"
   | "wallet_bound"
   | "error";
-const lastOutcome = new Map<string, { state: VerificationState; at: number }>();
+const lastOutcome = new Map<
+  string,
+  {
+    state: VerificationState;
+    at: number;
+    sessionId?: string;
+    lastPolledAt?: number;
+  }
+>();
 
-function setOutcome(wallet: string, state: VerificationState) {
-  lastOutcome.set(wallet, { state, at: Date.now() });
+function setOutcome(
+  wallet: string,
+  state: VerificationState,
+  sessionId?: string,
+) {
+  const previous = lastOutcome.get(wallet);
+  lastOutcome.set(wallet, {
+    state,
+    at: Date.now(),
+    sessionId: sessionId ?? previous?.sessionId,
+    lastPolledAt: previous?.lastPolledAt,
+  });
 }
+
+/**
+ * Act on a Didit result, whether it arrived by webhook or by asking Didit.
+ * Approved → salted identity hash → on-chain attestation (refused for a
+ * person already verified on another wallet).
+ */
+async function processResult(
+  wallet: string,
+  status: unknown,
+  decision: unknown,
+): Promise<{ httpStatus: number; body: Record<string, unknown> }> {
+  if (status === "Declined") setOutcome(wallet, "declined");
+  if (status === "In Review") setOutcome(wallet, "in_review");
+  if (status !== "Approved") {
+    return { httpStatus: 200, body: { ok: true } };
+  }
+
+  const identityHash = identityHashFromDecision(decision);
+  if (!identityHash) {
+    setOutcome(wallet, "error");
+    return {
+      httpStatus: 200,
+      body: { ok: true, attested: false, reason: "missing identity fields" },
+    };
+  }
+  try {
+    const outcome = await attestOnChain(wallet, identityHash);
+    if (outcome.ok) {
+      setOutcome(wallet, "approved");
+      return {
+        httpStatus: 200,
+        body: { ok: true, attested: true, txHash: outcome.txHash },
+      };
+    }
+    setOutcome(wallet, outcome.reason);
+    // 200 for business refusals (duplicate person): retrying can't change it.
+    return {
+      httpStatus: outcome.reason === "error" ? 500 : 200,
+      body: {
+        ok: outcome.reason !== "error",
+        attested: false,
+        reason: outcome.reason,
+      },
+    };
+  } catch (error) {
+    setOutcome(wallet, "error");
+    // 500 lets Didit retry a transient RPC failure.
+    return {
+      httpStatus: 500,
+      body: {
+        error: error instanceof Error ? error.message : "attestation failed",
+      },
+    };
+  }
+}
+
+const DECISION_POLL_INTERVAL_MS = 10_000;
 
 // ─── Authenticated (frontend) routes ─────────────────────────────────────────
 
@@ -50,7 +126,7 @@ verificationRouter.post("/session", async (req, res) => {
       return;
     }
     const session = await createDiditSession(wallet);
-    setOutcome(wallet, "pending");
+    setOutcome(wallet, "pending", session.sessionId);
     res.json({ verified: false, ...session });
   } catch (error) {
     res.status(502).json({
@@ -71,6 +147,28 @@ verificationRouter.get("/status", async (req, res) => {
   } catch {
     // fall through with the last known outcome
   }
+
+  // No webhook yet? Ask Didit directly (throttled). Covers local development,
+  // where Didit can't reach us, and any webhook that went missing.
+  const known = lastOutcome.get(wallet);
+  if (
+    !verified &&
+    known?.sessionId &&
+    (known.state === "pending" || known.state === "in_review") &&
+    Date.now() - (known.lastPolledAt ?? 0) > DECISION_POLL_INTERVAL_MS
+  ) {
+    known.lastPolledAt = Date.now();
+    try {
+      const decision = await fetchDiditDecision(known.sessionId);
+      if (decision?.status) {
+        const result = await processResult(wallet, decision.status, decision);
+        verified = result.body.attested === true;
+      }
+    } catch {
+      // keep the previous state; the next poll retries
+    }
+  }
+
   res.json({
     verified,
     state: verified ? "approved" : (lastOutcome.get(wallet)?.state ?? null),
@@ -108,43 +206,7 @@ diditWebhookRouter.post(
       return;
     }
 
-    if (status === "Declined") setOutcome(wallet, "declined");
-    if (status === "In Review") setOutcome(wallet, "in_review");
-    if (status !== "Approved") {
-      res.json({ ok: true });
-      return;
-    }
-
-    const identityHash = identityHashFromDecision(decision);
-    if (!identityHash) {
-      setOutcome(wallet, "error");
-      res.json({
-        ok: true,
-        attested: false,
-        reason: "missing identity fields",
-      });
-      return;
-    }
-    try {
-      const outcome = await attestOnChain(wallet, identityHash);
-      if (outcome.ok) {
-        setOutcome(wallet, "approved");
-        res.json({ ok: true, attested: true, txHash: outcome.txHash });
-      } else {
-        setOutcome(wallet, outcome.reason);
-        // 200 for business refusals (duplicate person): retrying can't change it.
-        res.status(outcome.reason === "error" ? 500 : 200).json({
-          ok: outcome.reason !== "error",
-          attested: false,
-          reason: outcome.reason,
-        });
-      }
-    } catch (error) {
-      setOutcome(wallet, "error");
-      // 500 lets Didit retry a transient RPC failure.
-      res.status(500).json({
-        error: error instanceof Error ? error.message : "attestation failed",
-      });
-    }
+    const result = await processResult(wallet, status, decision);
+    res.status(result.httpStatus).json(result.body);
   },
 );

@@ -83,6 +83,24 @@ export async function createDiditSession(
   return { url: body.url, sessionId: body.session_id };
 }
 
+/**
+ * Ask Didit for a session's result directly. Used when a webhook can't reach
+ * us (local development) or was missed; same shape as the webhook decision.
+ */
+export async function fetchDiditDecision(
+  sessionId: string,
+): Promise<{ status?: string; [key: string]: unknown } | null> {
+  const res = await fetch(
+    `${DIDIT_BASE}/session/${encodeURIComponent(sessionId)}/decision/`,
+    {
+      headers: { "x-api-key": env("DIDIT_API_KEY") },
+      signal: AbortSignal.timeout(15_000),
+    },
+  );
+  if (!res.ok) return null;
+  return (await res.json()) as { status?: string; [key: string]: unknown };
+}
+
 // ─── Webhook signatures (per Didit docs) ─────────────────────────────────────
 
 function shortenFloats(data: unknown): unknown {
