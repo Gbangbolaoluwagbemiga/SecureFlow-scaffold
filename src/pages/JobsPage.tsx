@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { useWeb3 } from "@/contexts/web3-context";
+import { translateContractError } from "@/lib/web3/contract-errors";
 import { useToast } from "@/hooks/use-toast";
 import { CONTRACTS } from "@/lib/web3/config";
 import { contractService } from "@/lib/web3/contract-service";
@@ -418,9 +419,12 @@ export default function JobsPage() {
       // Refresh the ongoing projects count
       await countOngoingProjects();
     } catch (error: any) {
-      const msg =
+      // Nothing above marks the job "Applied" until the backend has
+      // confirmed the transaction on-chain, so a failure leaves it unapplied.
+      const msg = translateContractError(
         error?.message ||
-        "Could not submit your application. Please try again.";
+          "Could not submit your application. Please try again.",
+      );
       toast({
         title: "Application Failed",
         description: msg,

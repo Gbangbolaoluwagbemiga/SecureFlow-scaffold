@@ -140,6 +140,11 @@ export const CONTRACT_ERROR_MESSAGES: Record<number, string> = {
  * a person can act on. Falls back to the raw text when no code is present.
  */
 export function translateContractError(raw: string): string {
+  // A brand-new Stellar wallet doesn't exist on the network until it holds
+  // some XLM. RPC reports that as "Account not found: G...".
+  if (/account not found/i.test(raw)) {
+    return "This wallet isn't activated on Stellar yet. Add a little XLM to it (on testnet, use Friendbot or fund it from another wallet), then try again.";
+  }
   const match = raw.match(/Error\(Contract,\s*#(\d+)\)/);
   if (match) {
     const code = parseInt(match[1], 10);

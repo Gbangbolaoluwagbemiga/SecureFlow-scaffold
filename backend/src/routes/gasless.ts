@@ -110,44 +110,50 @@ gaslessRouter.post("/apply", async (req, res) => {
 
     const sendResponse = await rpcServer.sendTransaction(feeBumpTx as any);
 
-    if (sendResponse.status === "ERROR") {
-      const errMsg =
-        (sendResponse as any).errorResult?.toString() ?? "Transaction failed";
-      res.status(500).json({ error: errMsg });
+    // Only a confirmed SUCCESS is reported as success. The old loop exited as
+    // soon as RPC said NOT_FOUND (normal for the first seconds after
+    // submission) and returned the hash as if it had worked, and
+    // TRY_AGAIN_LATER / DUPLICATE fell through to "success" too — so the UI
+    // showed "Applied" for applications that never reached the chain.
+    if (sendResponse.status !== "PENDING" || !sendResponse.hash) {
+      const detail =
+        (sendResponse as any).errorResult?.result?.()?.switch?.()?.name ??
+        sendResponse.status;
+      res.status(502).json({
+        error: `Transaction was not accepted by the network (${detail}). Please try again.`,
+      });
       return;
     }
 
-    if (sendResponse.status === "PENDING" && sendResponse.hash) {
-      let attempts = 0;
-      let txStatus: any = sendResponse;
-
-      while (attempts < 30 && txStatus.status === "PENDING") {
-        await new Promise((r) => setTimeout(r, 1000));
-        try {
-          const result = await rpcServer.getTransaction(sendResponse.hash);
-          txStatus = { ...txStatus, status: result.status };
-          if (result.status === "SUCCESS") {
-            res.json({ txHash: sendResponse.hash });
-            return;
-          }
-          if (result.status === "FAILED") {
-            res.status(500).json({
-              error: "Transaction failed on-chain",
-              txHash: sendResponse.hash,
-            });
-            return;
-          }
-        } catch {
-          /* keep polling */
-        }
-        attempts++;
+    const deadline = Date.now() + 45_000;
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 1500));
+      let result: Awaited<ReturnType<typeof rpcServer.getTransaction>>;
+      try {
+        result = await rpcServer.getTransaction(sendResponse.hash);
+      } catch {
+        continue; // transient RPC error: keep polling
       }
-
-      res.json({ txHash: sendResponse.hash, pending: true });
-      return;
+      if (result.status === "SUCCESS") {
+        res.json({ txHash: sendResponse.hash });
+        return;
+      }
+      if (result.status === "FAILED") {
+        const code = (result as any).resultXdr?.result?.()?.switch?.()?.name;
+        res.status(502).json({
+          error: `Transaction failed on-chain${code ? ` (${code})` : ""}.`,
+          txHash: sendResponse.hash,
+        });
+        return;
+      }
+      // NOT_FOUND: not in a ledger yet; keep waiting.
     }
 
-    res.json({ txHash: sendResponse.hash ?? "" });
+    res.status(504).json({
+      error:
+        "The network didn't confirm the transaction in time. It may still land; refresh in a minute before retrying.",
+      txHash: sendResponse.hash,
+    });
   } catch (err) {
     const msg =
       err instanceof Error ? err.message : "Gasless transaction failed";
