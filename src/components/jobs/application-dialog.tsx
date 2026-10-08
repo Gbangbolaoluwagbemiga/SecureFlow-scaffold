@@ -12,7 +12,17 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import type { Escrow } from "@/lib/web3/types";
-import { Sparkles, Paperclip, X, CheckCircle2, Layers } from "lucide-react";
+import {
+  Sparkles,
+  Paperclip,
+  X,
+  CheckCircle2,
+  Layers,
+  BadgeCheck,
+} from "lucide-react";
+import { Link } from "react-router-dom";
+import { useWeb3 } from "@/contexts/web3-context";
+import { contractService } from "@/lib/web3/contract-service";
 import { useToast } from "@/hooks/use-toast";
 import {
   isApiConfigured,
@@ -49,6 +59,17 @@ export function ApplicationDialog({
   applying,
 }: ApplicationDialogProps) {
   const { toast } = useToast();
+  const { wallet } = useWeb3();
+  // Unverified freelancers get a pointer to verification here, since the
+  // Freelancer menu only appears after their first application.
+  const [verified, setVerified] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (!open || !wallet.address) return;
+    contractService
+      .isFreelancerVerified(wallet.address)
+      .then(setVerified)
+      .catch(() => setVerified(null));
+  }, [open, wallet.address]);
   const [coverLetter, setCoverLetter] = useState("");
   const [proposedTimeline, setProposedTimeline] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
@@ -357,6 +378,23 @@ export function ApplicationDialog({
             </div>
           )}
         </div>
+
+        {verified === false && (
+          <p className="flex items-center gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-xs text-muted-foreground">
+            <BadgeCheck className="h-4 w-4 shrink-0 text-emerald-500" />
+            <span>
+              Verified freelancers stand out to clients.{" "}
+              <Link
+                to="/freelancer"
+                className="font-medium text-primary hover:underline"
+                onClick={() => onOpenChange(false)}
+              >
+                Verify your identity
+              </Link>{" "}
+              (about 2 minutes).
+            </span>
+          </p>
+        )}
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
