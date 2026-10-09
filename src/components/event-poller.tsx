@@ -32,7 +32,9 @@ import { getAutopilotInfo } from "@/lib/autopilot";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const POLL_INTERVAL_MS = 30_000; // 30 seconds
+const POLL_INTERVAL_MS = 15_000;
+/** Longest a single pass may hold the one-at-a-time guard. */
+const PASS_TIMEOUT_MS = 25_000;
 const NOTIFIED_KEY = "secureflow_notified_event_ids";
 const SINCE_KEY = "secureflow_notify_since_ledger";
 const MAX_NOTIFIED_IDS = 2000;
@@ -317,13 +319,24 @@ export function EventPoller() {
     // becoming visible, which a wallet popup does several times in a row; with
     // network reads inside the loop, overlapping passes each saw the same
     // event as new and notified it once apiece.
+    //
+    // But never held for longer than PASS_TIMEOUT_MS. RPC reads have no
+    // timeout of their own, and one request that never answered kept the
+    // guard shut for good: the tab stopped hearing about anything until it
+    // was reloaded. A pass that outlives the timeout is left to finish on its
+    // own; events are claimed before any await, so it can't double-notify.
     let running = false;
 
     const poll = async () => {
       if (document.visibilityState === "hidden" || running) return;
       running = true;
       try {
-        await pollOnce();
+        await Promise.race([
+          pollOnce(),
+          new Promise((resolve) => setTimeout(resolve, PASS_TIMEOUT_MS)),
+        ]);
+      } catch {
+        // A failed pass is retried on the next tick.
       } finally {
         running = false;
       }

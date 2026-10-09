@@ -262,6 +262,19 @@ export function MilestoneActions({
             }),
           );
         }
+        // Tell the client straight away through the API as well. Their own
+        // event poller also picks this up from the chain; the two copies
+        // collapse into one, so this only makes delivery faster and sturdier.
+        if (
+          (actionType === "submit" || actionType === "resubmit") &&
+          payerAddress
+        ) {
+          addNotification(
+            createMilestoneNotification("submitted", escrowId, milestoneIndex),
+            [payerAddress],
+          );
+        }
+
         if (actionType === "approve") {
           window.dispatchEvent(
             new CustomEvent("milestoneApproved", {
