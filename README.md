@@ -12,7 +12,7 @@ Clients lock the budget in a Soroban contract before work starts. Freelancers ar
 [![Stellar Soroban](https://img.shields.io/badge/Stellar-Soroban-7D00FF?style=flat-square&logo=stellar)](https://developers.stellar.org/docs/build/smart-contracts/overview)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue?style=flat-square)](LICENSE)
 
-**[Live app (testnet)](https://secureflow-testnet.vercel.app/)** · **[Contract on Stellar Expert](https://stellar.expert/explorer/testnet/contract/CAJAUKTFKRYZCIFCQOGNZJMCJITC574Z5DUFRINMXXR7VIYKRBEFPS7H)**
+**[Live app (testnet)](https://secureflow-stellar.vercel.app/)** · **[Contract on Stellar Expert](https://stellar.expert/explorer/testnet/contract/CAJAUKTFKRYZCIFCQOGNZJMCJITC574Z5DUFRINMXXR7VIYKRBEFPS7H)**
 
 🏆 Winner, Scaffold Stellar Hackathon 2025
 
