@@ -2630,7 +2630,7 @@ export default function FreelancerPage() {
                         <label className="block text-sm font-medium mb-1.5 text-red-600">
                           Rejection Reason
                         </label>
-                        <div className="p-2.5 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-800 dark:text-red-300">
+                        <div className="p-2.5 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-800 dark:text-red-300 whitespace-pre-line max-h-64 overflow-y-auto">
                           {(() => {
                             const escrow = escrows.find(
                               (e) => e.id === selectedResubmitEscrow,

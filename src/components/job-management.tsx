@@ -14,7 +14,6 @@ import {
   AlertTriangle,
   Info,
   RotateCcw,
-  Bot,
 } from "lucide-react";
 import {
   Dialog,
@@ -77,8 +76,6 @@ function applicantPenaltyPct(applications: number): number {
   return 15;
 }
 
-const STELLAR_ADDRESS = /^G[A-Z2-7]{55}$/;
-
 export function JobManagement({
   escrowId,
   status,
@@ -95,8 +92,6 @@ export function JobManagement({
   const [heldFee, setHeldFee] = useState<bigint>(0n);
   const [onChainOpen, setOnChainOpen] = useState<boolean | null>(null);
   const [arbitrated, setArbitrated] = useState(false);
-  const [manager, setManager] = useState<string | null>(null);
-  const [managerInput, setManagerInput] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [addXlm, setAddXlm] = useState("");
   const [selectedAddMilestone, setSelectedAddMilestone] = useState<
@@ -129,10 +124,6 @@ export function JobManagement({
         setOnChainOpen(flags.isOpenJob);
         setHeldFee(flags.platformFee);
       })
-      .catch(() => {});
-    contractService
-      .getJobManager(id)
-      .then(setManager)
       .catch(() => {});
     if (inProgress) {
       contractService
@@ -362,43 +353,6 @@ export function JobManagement({
           "Freelancers can apply again. Paid work stays paid and its history stays visible.",
       },
     );
-
-  const handleSetManager = async () => {
-    const candidate = managerInput.trim();
-    if (!STELLAR_ADDRESS.test(candidate)) {
-      toast({
-        title: "Invalid address",
-        description: "Enter a Stellar account address (starts with G).",
-        variant: "destructive",
-      });
-      return;
-    }
-    const done = await runAction(
-      "Appointing manager",
-      () => contractService.setJobManager(id, candidate, wallet.address!),
-      {
-        title: "Job manager appointed",
-        description:
-          "They can hire, approve and reject on your behalf. Payments still only go to the freelancer.",
-      },
-    );
-    if (done) {
-      setManager(candidate);
-      setManagerInput("");
-    }
-  };
-
-  const handleRevokeManager = async () => {
-    const done = await runAction(
-      "Revoking manager",
-      () => contractService.revokeJobManager(id, wallet.address!),
-      {
-        title: "Manager revoked",
-        description: "You're managing this job yourself again.",
-      },
-    );
-    if (done) setManager(null);
-  };
 
   return (
     <Card className="glass border-primary/20 p-4 mt-4">
@@ -702,50 +656,6 @@ export function JobManagement({
             : "After arbitration you can take back money on milestones nobody has started, or reopen the job for someone else."}
         </p>
       )}
-
-      {/* Autopilot: job manager */}
-      <div className="mt-4 pt-4 border-t border-border/60 space-y-2">
-        <div className="flex items-center gap-2">
-          <Bot className="h-4 w-4 text-primary" />
-          <h4 className="text-sm font-semibold">Job Manager (Autopilot)</h4>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Let someone (or an agent) run this job for you: hire, approve, reject
-          and escalate. They can never cancel, move funds, or be paid by this
-          job.
-        </p>
-        {manager ? (
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2 text-xs">
-            <span className="font-mono truncate">
-              {manager.slice(0, 6)}…{manager.slice(-6)}
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={isSubmitting}
-              onClick={handleRevokeManager}
-            >
-              Revoke
-            </Button>
-          </div>
-        ) : (
-          <div className="flex gap-2">
-            <Input
-              placeholder="Manager address (G…)"
-              value={managerInput}
-              onChange={(e) => setManagerInput(e.target.value)}
-              className="h-8 text-xs font-mono"
-            />
-            <Button
-              size="sm"
-              disabled={isSubmitting || !managerInput.trim()}
-              onClick={handleSetManager}
-            >
-              Appoint
-            </Button>
-          </div>
-        )}
-      </div>
     </Card>
   );
 }

@@ -630,7 +630,7 @@ export function MilestoneActions({
                   <label className="block text-sm font-medium text-red-600 mb-2">
                     Rejection Reason
                   </label>
-                  <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800">
+                  <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800 whitespace-pre-line">
                     {milestone.rejectionReason}
                   </div>
                 </div>

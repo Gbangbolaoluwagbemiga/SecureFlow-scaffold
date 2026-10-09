@@ -19,6 +19,7 @@ import {
   CheckCircle2,
   Layers,
   BadgeCheck,
+  ListChecks,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useWeb3 } from "@/contexts/web3-context";
@@ -31,6 +32,11 @@ import {
   type UploadedFile,
 } from "@/lib/api";
 import { CONTRACTS } from "@/lib/web3/config";
+import {
+  getAutopilotInfo,
+  getAutopilotJob,
+  type AutopilotJob,
+} from "@/lib/autopilot";
 
 interface MilestonePreview {
   description: string;
@@ -70,6 +76,24 @@ export function ApplicationDialog({
       .then(setVerified)
       .catch(() => setVerified(null));
   }, [open, wallet.address]);
+  // Jobs run by Autopilot publish the criteria applicants are ranked and
+  // judged by, and give verified freelancers a fixed edge in that ranking.
+  const [autopilot, setAutopilot] = useState<AutopilotJob | null>(null);
+  const [verifiedEdge, setVerifiedEdge] = useState(10);
+  useEffect(() => {
+    if (!open || !job || !isApiConfigured()) return;
+    let cancelled = false;
+    void Promise.all([getAutopilotJob(Number(job.id)), getAutopilotInfo()])
+      .then(([j, info]) => {
+        if (cancelled) return;
+        setAutopilot(j.managed ? j : null);
+        if (info) setVerifiedEdge(info.verifiedEdge);
+      })
+      .catch(() => !cancelled && setAutopilot(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [open, job]);
   const [coverLetter, setCoverLetter] = useState("");
   const [proposedTimeline, setProposedTimeline] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
@@ -274,6 +298,27 @@ export function ApplicationDialog({
             ) : null}
           </div>
 
+          {autopilot?.criteria && autopilot.criteria.length > 0 && (
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
+              <Label className="mb-1.5 flex items-center gap-1.5">
+                <ListChecks className="h-3.5 w-3.5 text-amber-500" />
+                How this job is judged
+              </Label>
+              <ol className="list-decimal space-y-1 pl-5 text-sm text-muted-foreground">
+                {autopilot.criteria.map((c, i) => (
+                  <li key={i}>{c}</li>
+                ))}
+              </ol>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Applicants are ranked side by side on how well they fit these
+                {verified === true
+                  ? " — your verified identity gives you an edge."
+                  : `, and verified freelancers get +${verifiedEdge} points.`}{" "}
+                Address them in your cover letter and link your past work.
+              </p>
+            </div>
+          )}
+
           <div>
             <div className="flex items-center justify-between gap-2 mb-2">
               <Label htmlFor="coverLetter">Cover Letter *</Label>
@@ -383,7 +428,9 @@ export function ApplicationDialog({
           <p className="flex items-center gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-xs text-muted-foreground">
             <BadgeCheck className="h-4 w-4 shrink-0 text-emerald-500" />
             <span>
-              Verified freelancers stand out to clients.{" "}
+              {autopilot
+                ? `Verified freelancers get +${verifiedEdge} points when applicants are ranked for this job.`
+                : "Verified freelancers stand out to clients."}{" "}
               <Link
                 to="/freelancer"
                 className="font-medium text-primary hover:underline"

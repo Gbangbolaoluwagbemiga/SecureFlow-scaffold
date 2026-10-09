@@ -22,6 +22,7 @@ import {
 import { MilestoneActions } from "@/components/milestone-actions";
 import { MilestoneNegotiation } from "@/components/milestone-negotiation";
 import { JobManagement } from "@/components/job-management";
+import { AutopilotPanel } from "@/components/autopilot/autopilot-panel";
 import { EvidenceSubmissionButton } from "@/components/evidence-submission-button";
 import { ViewEvidenceButton } from "@/components/view-evidence-button";
 import { parseAttachment } from "@/lib/utils";
@@ -298,6 +299,18 @@ export function EscrowCard({
 
             {expandedEscrow === escrow.id && (
               <div className="space-y-4 pt-4 border-t">
+                {escrow.isClient && (
+                  <AutopilotPanel
+                    escrowId={Number(escrow.id)}
+                    status={escrow.status}
+                    hasFreelancer={!isOpenJob}
+                    milestones={escrow.milestones.map((m) => ({
+                      description:
+                        (m as any).originalDescription ?? m.description ?? "",
+                      amount: m.amount,
+                    }))}
+                  />
+                )}
                 <div className="space-y-3">
                   <h4 className="font-medium">Milestones:</h4>
                   {escrow.milestones.map((milestone, idx) => (
