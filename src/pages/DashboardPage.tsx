@@ -3,6 +3,7 @@ import { Card } from "@/components/ui/card";
 import { useWeb3 } from "@/contexts/web3-context";
 import { useToast } from "@/hooks/use-toast";
 import { CONTRACTS } from "@/lib/web3/config";
+import { ContractService } from "@/lib/web3/contract-service";
 
 import {
   useNotifications,
@@ -38,7 +39,7 @@ import { Button } from "@/components/ui/button";
 import { RefreshCw } from "lucide-react";
 
 export default function DashboardPage() {
-  const { wallet, getContract, refreshBalance } = useWeb3();
+  const { wallet, refreshBalance } = useWeb3();
   const { toast } = useToast();
   const { addNotification } = useNotifications();
   const [escrows, setEscrows] = useState<Escrow[]>([]);
@@ -659,11 +660,12 @@ export default function DashboardPage() {
 
   const startWork = async (escrowId: string) => {
     try {
-      const contract = getContract(CONTRACTS.SECUREFLOW_ESCROW);
-      if (!contract) return;
-
+      if (!wallet.address) return;
       setSubmittingMilestone(escrowId);
-      await contract.send("start_work", escrowId);
+      await new ContractService(CONTRACTS.SECUREFLOW_ESCROW).startWork(
+        Number(escrowId),
+        wallet.address,
+      );
       toast({
         title: "Work Started",
         description: "You have started work on this escrow",
@@ -764,20 +766,18 @@ export default function DashboardPage() {
       }
 
       setSubmittingMilestone(`${escrowId}-${milestoneIndex}`);
-      const contract = getContract(CONTRACTS.SECUREFLOW_ESCROW);
-      if (!contract) return;
+      if (!wallet.address) return;
 
       toast({
         title: "Approving milestone...",
         description: "Please confirm the transaction in your wallet",
       });
 
-      await contract.send(
-        "approve_milestone",
-        "no-value",
-        escrowId,
-        milestoneIndex,
-      );
+      await new ContractService(CONTRACTS.SECUREFLOW_ESCROW).approveMilestone({
+        escrow_id: Number(escrowId),
+        milestone_index: milestoneIndex,
+        depositor: wallet.address,
+      });
 
       // Transaction is already confirmed via waitForConfirmation in web3-context
       // For Stellar, we don't need to poll for receipts like Ethereum

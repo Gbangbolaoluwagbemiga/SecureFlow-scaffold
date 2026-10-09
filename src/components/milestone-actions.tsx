@@ -25,6 +25,7 @@ import {
   XCircle,
 } from "lucide-react";
 import type { Milestone } from "@/lib/web3/types";
+import { ContractService } from "@/lib/web3/contract-service";
 import {
   AutopilotReviewing,
   useAutopilotManaged,
@@ -59,7 +60,7 @@ export function MilestoneActions({
   escrowReleasedAmount,
   escrowTotalAmount,
 }: MilestoneActionsProps) {
-  const { wallet, getContract } = useWeb3();
+  const { wallet } = useWeb3();
   const { addNotification } = useNotifications();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
@@ -111,27 +112,28 @@ export function MilestoneActions({
     if (!actionType) return;
 
     setIsLoading(true);
-    const contract = getContract(CONTRACTS.SECUREFLOW_ESCROW);
+    const service = new ContractService(CONTRACTS.SECUREFLOW_ESCROW);
 
     try {
       let txHash: string | undefined;
 
       switch (actionType) {
+        // Named-argument calls through ContractService: the generic
+        // contract.send passed these positionally, and the generated client
+        // rejected them ("Missing field escrow_id").
         case "start":
-          txHash = await contract.send(
-            "start_work",
+          txHash = await service.startWork(
             Number(escrowId),
-            wallet.address,
+            wallet.address || "",
           );
           break;
         case "submit":
-          txHash = await contract.send(
-            "submit_milestone",
-            Number(escrowId),
-            milestoneIndex,
-            milestone.description,
-            wallet.address,
-          );
+          txHash = await service.submitMilestone({
+            escrow_id: Number(escrowId),
+            milestone_index: milestoneIndex,
+            description: milestone.description,
+            beneficiary: wallet.address || "",
+          });
           break;
         case "approve":
           // Use ContractService instead of contract.send - it handles the correct format
@@ -183,13 +185,12 @@ export function MilestoneActions({
           });
           break;
         case "resubmit":
-          txHash = await contract.send(
-            "submit_milestone",
-            Number(escrowId),
-            milestoneIndex,
-            resubmitMessage || milestone.description,
-            wallet.address,
-          );
+          txHash = await service.resubmitMilestone({
+            escrow_id: Number(escrowId),
+            milestone_index: milestoneIndex,
+            description: resubmitMessage || milestone.description,
+            beneficiary: wallet.address || "",
+          });
           break;
       }
 
