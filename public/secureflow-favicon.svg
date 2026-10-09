@@ -1,27 +1,28 @@
-<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+<!--
+  SecureFlow mark: a water drop with the S carved through it.
+  The S is also the waterline — shallow water on one side, deep on the other —
+  so the letter and the flow are the same line. The S is a true cut-out
+  (mask), so it always shows whatever the mark sits on.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="13 5 38 53" fill="none">
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#3B82F6"/>
-      <stop offset="100%" stop-color="#1D4ED8"/>
+    <linearGradient id="sff-shallow" x1="22" y1="8" x2="36" y2="44" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#67E8F9"/>
+      <stop offset="1" stop-color="#06B6D4"/>
     </linearGradient>
-    <linearGradient id="accent" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#10B981"/>
-      <stop offset="100%" stop-color="#059669"/>
+    <linearGradient id="sff-deep" x1="44" y1="26" x2="26" y2="58" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2563EB"/>
+      <stop offset="1" stop-color="#172554"/>
     </linearGradient>
+    <clipPath id="sff-drop"><path d="M32 6.5C32 6.5 15 25.5 15 39.5A17 17 0 0 0 49 39.5C49 25.5 32 6.5 32 6.5Z"/></clipPath>
+    <mask id="sff-carve" maskUnits="userSpaceOnUse" x="0" y="0" width="64" height="64">
+      <rect width="64" height="64" fill="#fff"/>
+      <path d="M38.8 26.2C34.8 22.6 25.6 23.4 25.6 29.6C25.6 35.4 38.6 34.4 38.6 42C38.6 48.4 29.2 50 24.6 46" stroke="#000" stroke-width="5" stroke-linecap="round"/>
+    </mask>
   </defs>
-
-  <!-- Background rounded square -->
-  <rect width="32" height="32" rx="7" fill="url(#bg)"/>
-
-  <!-- Shield outline -->
-  <path d="M16 4L24 7.5V16C24 21.3 20.5 25.8 16 28C11.5 25.8 8 21.3 8 16V7.5L16 4Z"
-        fill="white" fill-opacity="0.18" stroke="white" stroke-opacity="0.5" stroke-width="1.2"/>
-
-  <!-- S letter -->
-  <path d="M12.5 12.5C12.5 11.4 13.4 10.5 14.5 10.5H17C18.1 10.5 19 11.4 19 12.5C19 13.6 18.1 14.5 17 14.5H15C13.9 14.5 13 15.4 13 16.5C13 17.6 13.9 18.5 15 18.5H17.5C18.6 18.5 19.5 17.6 19.5 16.5"
-        stroke="white" stroke-width="1.8" stroke-linecap="round" fill="none"/>
-
-  <!-- Checkmark / flow tick -->
-  <path d="M11 21L13.5 23.5L21 17"
-        stroke="url(#accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <g clip-path="url(#sff-drop)" mask="url(#sff-carve)">
+    <rect width="64" height="64" fill="url(#sff-deep)"/>
+    <path d="M50 18L38.8 26.2C34.8 22.6 25.6 23.4 25.6 29.6C25.6 35.4 38.6 34.4 38.6 42C38.6 48.4 29.2 50 24.6 46L8 58H0V0H64V18Z" fill="url(#sff-shallow)"/>
+  </g>
+  <path d="M18.6 41.5C18.3 37.6 19.2 33.4 21.1 29.6" stroke="#FFFFFF" stroke-opacity=".7" stroke-width="1.8" stroke-linecap="round"/>
 </svg>

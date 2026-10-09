@@ -16,6 +16,7 @@ import { ProjectDetailsStep } from "@/components/create/project-details-step";
 import { MilestonesStep } from "@/components/create/milestones-step";
 import { ReviewStep } from "@/components/create/review-step";
 import { useCreateEscrow } from "@/hooks/use-escrows";
+import { contractService } from "@/lib/web3/contract-service";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertCircle } from "lucide-react";
 
@@ -331,26 +332,36 @@ export default function CreateEscrowPage() {
       // Stellar: Convert XLM to stroops (1 XLM = 10,000,000 stroops)
       // For Stellar, we use stroops instead of wei
       const STROOPS_PER_XLM = 10_000_000;
-      const totalAmountInStroops = BigInt(
-        Math.floor(Number.parseFloat(formData.totalBudget) * STROOPS_PER_XLM),
+
+      // Convert milestone amounts to stroops (Stellar uses stroops, not wei)
+      const milestoneAmountsInStroops = formData.milestones.map((m) =>
+        BigInt(Math.round(Number.parseFloat(m.amount) * STROOPS_PER_XLM)),
       );
+
+      // The contract requires milestones to sum to the total EXACTLY, so the
+      // total is the sum of the converted milestones rather than the typed
+      // budget converted separately (0.1 + 0.2 style rounding would differ).
+      const totalAmountInStroops = milestoneAmountsInStroops.reduce(
+        (sum, amount) => sum + amount,
+        0n,
+      );
+
+      // The client deposits the budget PLUS the platform fee on top.
+      const feeBp = BigInt(await contractService.getPlatformFeeBP());
+      const feeInStroops = (totalAmountInStroops * feeBp) / 10_000n;
+      const requiredInStroops = totalAmountInStroops + feeInStroops;
 
       // Check native XLM balance using wallet balance
       // For native XLM (useNativeToken = true), token will be empty or null
       if (formData.useNativeToken || !formData.token || formData.token === "") {
         const walletBalance = Number.parseFloat(wallet.balance || "0");
-        const requiredBalance = Number.parseFloat(formData.totalBudget);
+        const requiredBalance = Number(requiredInStroops) / STROOPS_PER_XLM;
         if (walletBalance < requiredBalance) {
           throw new Error(
-            `Insufficient XLM balance. You have ${walletBalance.toFixed(4)} XLM but need ${formData.totalBudget} XLM.`,
+            `Insufficient XLM balance. You have ${walletBalance.toFixed(4)} XLM but need ${requiredBalance.toFixed(4)} XLM (budget plus ${Number(feeBp) / 100}% platform fee).`,
           );
         }
       }
-
-      // Convert milestone amounts to stroops (Stellar uses stroops, not wei)
-      const milestoneAmountsInStroops = formData.milestones.map((m) =>
-        BigInt(Math.floor(Number.parseFloat(m.amount) * STROOPS_PER_XLM)),
-      );
 
       // Default arbiter - use a Stellar address (you should replace this with a real arbiter address)
       // For now, use a default arbiter address - in production, this should come from formData or be configurable

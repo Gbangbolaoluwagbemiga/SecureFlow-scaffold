@@ -1,12 +1,16 @@
 import { useState, useEffect, useCallback } from "react";
 import { useWeb3 } from "@/contexts/web3-context";
-import { CONTRACTS } from "@/lib/web3/config";
-import { ContractService } from "@/lib/web3/contract-service";
+import { contractService } from "@/lib/web3/contract-service";
 
+/**
+ * Has this wallet created any escrow? One index read plus one batch read,
+ * instead of probing escrow ids 1..20 one network call at a time (which ran
+ * on every page via the navbar and missed anything past id 20).
+ */
 export function useJobCreatorStatus() {
-  const { wallet, getContract } = useWeb3();
+  const { wallet } = useWeb3();
   const [isJobCreator, setIsJobCreator] = useState(false);
-  const [loading, setLoading] = useState(true); // Start with true to show loading initially
+  const [loading, setLoading] = useState(true);
 
   const checkJobCreatorStatus = useCallback(async () => {
     if (!wallet.isConnected || !wallet.address) {
@@ -14,63 +18,15 @@ export function useJobCreatorStatus() {
       setLoading(false);
       return;
     }
-
     setLoading(true);
     try {
-      const contract = getContract(CONTRACTS.SECUREFLOW_ESCROW);
-      if (!contract) {
-        setIsJobCreator(false);
-        setLoading(false);
-        return;
-      }
-
-      // Check escrows directly using ContractService
-      // Don't rely on getNextEscrowId() - it might fail or timeout
-      const contractService = new ContractService(CONTRACTS.SECUREFLOW_ESCROW);
-
-      // Check up to 20 escrows (reasonable limit)
-      const maxEscrowsToCheck = 20;
-      for (let i = 1; i <= maxEscrowsToCheck; i++) {
-        try {
-          const escrow = await contractService.getEscrow(i);
-
-          // Skip if escrow doesn't exist
-          if (!escrow) {
-            // If we've checked a few escrows and none exist, stop checking
-            if (i > 5) {
-              break;
-            }
-            continue;
-          }
-
-          // Extract creator address from escrow
-          // EscrowData has a 'creator' field
-          const depositorAddress = escrow.creator;
-
-          // Check if current user is the creator (job creator)
-          const isMyJob =
-            wallet.address &&
-            depositorAddress &&
-            depositorAddress.toLowerCase().trim() ===
-              wallet.address.toLowerCase().trim();
-
-          if (isMyJob) {
-            setIsJobCreator(true);
-            setLoading(false);
-            return;
-          }
-        } catch (error) {
-          // If we get an error, it might mean the escrow doesn't exist
-          // Stop checking after a few consecutive errors
-          if (i > 5) {
-            break;
-          }
-          continue;
-        }
-      }
-
-      setIsJobCreator(false);
-    } catch (error) {
+      const me = wallet.address.toLowerCase().trim();
+      const ids = await contractService.getUserEscrows(wallet.address);
+      const escrows = await contractService.getEscrowsBatch(ids.map(Number));
+      setIsJobCreator(
+        escrows.some((e) => e.creator.toLowerCase().trim() === me),
+      );
+    } catch {
       setIsJobCreator(false);
     } finally {
       setLoading(false);
@@ -78,7 +34,7 @@ export function useJobCreatorStatus() {
   }, [wallet.isConnected, wallet.address]);
 
   useEffect(() => {
-    checkJobCreatorStatus();
+    void checkJobCreatorStatus();
   }, [checkJobCreatorStatus]);
 
   return { isJobCreator, loading };

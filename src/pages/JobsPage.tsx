@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { useWeb3 } from "@/contexts/web3-context";
+import { translateContractError } from "@/lib/web3/contract-errors";
 import { useToast } from "@/hooks/use-toast";
 import { CONTRACTS } from "@/lib/web3/config";
 import { contractService } from "@/lib/web3/contract-service";
@@ -147,12 +148,12 @@ export default function JobsPage() {
       // Use the contract's user->escrows index instead of relying on the legacy wrapper shape.
       const escrowIds = await contractService.getUserEscrows(wallet.address);
 
-      let ongoingCount = 0;
-      for (const id of escrowIds) {
-        const escrow = await contractService.getEscrow(id);
-        if (!escrow) continue;
-        if (escrow.status === 0 || escrow.status === 1) ongoingCount++;
-      }
+      const escrows = await contractService.getEscrowsBatch(
+        escrowIds.map(Number),
+      );
+      const ongoingCount = escrows.filter(
+        (e) => e.status === 0 || e.status === 1,
+      ).length;
 
       setOngoingProjectsCount(ongoingCount);
     } catch (error) {
@@ -165,19 +166,13 @@ export default function JobsPage() {
       // Check blockchain for application status for each job
       if (!wallet.address || jobs.length === 0) return;
 
+      // One read of the freelancer's applications index, not one per job.
+      const appliedIds = new Set(
+        await contractService.getFreelancerApplicationIds(wallet.address),
+      );
       const applicationStatus: Record<string, boolean> = {};
-
       for (const job of jobs) {
-        try {
-          const hasAppliedResult = await contractService.hasUserApplied(
-            Number.parseInt(job.id, 10),
-            wallet.address,
-          );
-          applicationStatus[job.id] = hasAppliedResult;
-        } catch (error) {
-          // Preserve existing state if check fails
-          applicationStatus[job.id] = hasApplied[job.id] || false;
-        }
+        applicationStatus[job.id] = appliedIds.has(Number(job.id));
       }
 
       setHasApplied((prev) => ({
@@ -228,126 +223,64 @@ export default function JobsPage() {
         currentLedger = Math.floor(Date.now() / 1000 / SECONDS_PER_LEDGER);
       }
 
-      // Get total number of escrows using contract service
-      // NO TIMEOUT - let it complete fully to get accurate count from blockchain
-      const escrowCount = await contractService.getNextEscrowId();
+      // Three reads in parallel instead of one network round-trip per escrow
+      // ever created: the contract's open-jobs index, the total count, and
+      // this wallet's applications index.
+      const [escrowCount, openIds, appliedIds] = await Promise.all([
+        contractService.getNextEscrowId(),
+        contractService.getOpenJobIds(),
+        wallet.address
+          ? contractService.getFreelancerApplicationIds(wallet.address)
+          : Promise.resolve([] as number[]),
+      ]);
+      setTotalEscrowsCount(Math.max(0, escrowCount - 1));
+      const applied = new Set(appliedIds);
 
-      // Set the actual escrow count from blockchain
-      // escrowCount is the next available ID, so actual count is escrowCount - 1
-      const actualCount = Math.max(0, escrowCount - 1);
-      setTotalEscrowsCount(actualCount);
+      const zeroAddress =
+        "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
+      const SECONDS_PER_LEDGER = 5;
+      const escrows = await contractService.getEscrowsBatch(openIds);
 
-      const openJobs: Escrow[] = [];
+      const openJobs: Escrow[] = escrows.map((escrowData) => {
+        const id = escrowData.escrow_id;
+        const isJobCreator =
+          !!wallet.address &&
+          escrowData.creator.toLowerCase().trim() ===
+            wallet.address.toLowerCase().trim();
 
-      // Fetch open jobs from the contract
-      // escrowCount is the next available ID, so if it's 2, that means 1 escrow exists
-      // But if it times out and returns 1, we should still check escrow 1 directly
-      // Limit the number of escrows to fetch to prevent long loading times
-      const maxEscrowsToFetch = 20; // Limit to 20 escrows max
-      const escrowsToCheck = Math.min(
-        Math.max(escrowCount - 1, 1),
-        maxEscrowsToFetch,
-      );
+        // created_at and deadline are LEDGER SEQUENCE NUMBERS (~5 s each).
+        const ledgerDiff = escrowData.deadline - escrowData.created_at;
+        const durationInDays = Math.max(
+          0,
+          Math.round((ledgerDiff * SECONDS_PER_LEDGER) / (24 * 60 * 60)),
+        );
+        const secondsAgo =
+          (currentLedger - escrowData.created_at) * SECONDS_PER_LEDGER;
 
-      // Always check at least escrow 1, even if escrowCount is 1 (might be timeout default)
-      if (escrowsToCheck > 0) {
-        for (let i = 1; i <= escrowsToCheck; i++) {
-          try {
-            const escrowData = await contractService.getEscrow(i);
-            if (!escrowData) {
-              continue;
-            }
+        return {
+          id: id.toString(),
+          payer: escrowData.creator,
+          beneficiary: escrowData.freelancer || zeroAddress,
+          token: escrowData.token || "",
+          totalAmount: escrowData.amount,
+          releasedAmount: "0",
+          status: getStatusFromNumber(escrowData.status),
+          createdAt: Date.now() - secondsAgo * 1000,
+          duration: durationInDays,
+          milestones: [],
+          projectTitle: escrowData.project_title || "",
+          projectDescription: escrowData.project_description || "",
+          isOpenJob: true,
+          applications: [],
+          applicationCount: 0,
+          isJobCreator,
+        };
+      });
 
-            // Check if this is an open job (beneficiary is null or zero address)
-            // For Stellar, null beneficiary means it's an open job
-            const zeroAddress =
-              "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
-            const isOpenJob =
-              !escrowData.freelancer ||
-              escrowData.freelancer === zeroAddress ||
-              escrowData.freelancer === "";
-
-            if (isOpenJob) {
-              // Check if current user is the job creator (should not be able to apply to own job)
-              const isJobCreator =
-                wallet.address &&
-                escrowData.creator &&
-                escrowData.creator.toLowerCase().trim() ===
-                  wallet.address.toLowerCase().trim();
-
-              // Check if current user has already applied to this job
-              // First check local state (preserves state after applying)
-              let userHasApplied = hasApplied[i] || false;
-              let applicationCount = 0;
-
-              // Only check blockchain if not already in local state
-              if (!userHasApplied && wallet.address) {
-                try {
-                  userHasApplied = await contractService.hasUserApplied(
-                    i,
-                    wallet.address,
-                  );
-                } catch (error) {
-                  userHasApplied = false;
-                }
-              }
-
-              // IMPORTANT: created_at and deadline are LEDGER SEQUENCE NUMBERS, not timestamps!
-              // Stellar ledgers close approximately every 5 seconds
-              // Duration = (deadline - created_at) * 5 seconds
-              const SECONDS_PER_LEDGER = 5;
-              const ledgerDiff = escrowData.deadline - escrowData.created_at;
-              const durationInSeconds = ledgerDiff * SECONDS_PER_LEDGER;
-              const durationInDays = Math.max(
-                0,
-                Math.round(durationInSeconds / (24 * 60 * 60)),
-              );
-
-              // Calculate approximate timestamp: current time - (current_ledger - created_at) * 5 seconds
-              const ledgersAgo = currentLedger - escrowData.created_at;
-              const secondsAgo = ledgersAgo * SECONDS_PER_LEDGER;
-              const approxCreatedAt = Date.now() - secondsAgo * 1000;
-
-              // Convert contract data to our Escrow type
-              // All data is from blockchain - fetched via contractService.getEscrow()
-              const job: Escrow = {
-                id: i.toString(),
-                payer: escrowData.creator, // depositor/creator (from blockchain)
-                beneficiary: escrowData.freelancer || zeroAddress, // beneficiary/freelancer (from blockchain)
-                token: escrowData.token || "", // token (from blockchain)
-                totalAmount: escrowData.amount, // totalAmount (from blockchain)
-                releasedAmount: "0", // paidAmount - would need to calculate from milestones
-                status: getStatusFromNumber(escrowData.status), // status (from blockchain)
-                createdAt: approxCreatedAt, // Approximate timestamp from ledger sequence
-                duration: durationInDays, // Duration in days (calculated correctly from ledger sequence)
-                milestones: [], // Would need to fetch milestones separately
-                projectTitle: escrowData.project_title || "", // projectTitle (from blockchain)
-                projectDescription: escrowData.project_description || "", // projectDescription (from blockchain)
-                isOpenJob: true,
-                applications: [], // Would need to fetch applications separately
-                applicationCount: applicationCount, // Add real application count
-                isJobCreator: !!isJobCreator, // Add flag to track if current user is the job creator (from blockchain)
-              };
-
-              // Log blockchain data for debugging
-
-              openJobs.push(job);
-
-              // Store application status from blockchain check
-              setHasApplied((prev) => {
-                const newState = {
-                  ...prev,
-                  [job.id]: userHasApplied, // Always use blockchain result
-                };
-                return newState;
-              });
-            }
-          } catch (error) {
-            // Skip escrows that don't exist or user doesn't have access to
-            continue;
-          }
-        }
-      }
+      const appliedState: Record<string, boolean> = {};
+      for (const job of openJobs)
+        appliedState[job.id] = applied.has(Number(job.id));
+      setHasApplied((prev) => ({ ...prev, ...appliedState }));
 
       // Set the actual jobs from the blockchain contract
       // All data in openJobs is fetched directly from the blockchain
@@ -486,9 +419,12 @@ export default function JobsPage() {
       // Refresh the ongoing projects count
       await countOngoingProjects();
     } catch (error: any) {
-      const msg =
+      // Nothing above marks the job "Applied" until the backend has
+      // confirmed the transaction on-chain, so a failure leaves it unapplied.
+      const msg = translateContractError(
         error?.message ||
-        "Could not submit your application. Please try again.";
+          "Could not submit your application. Please try again.",
+      );
       toast({
         title: "Application Failed",
         description: msg,

@@ -12,7 +12,18 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import type { Escrow } from "@/lib/web3/types";
-import { Sparkles, Paperclip, X, CheckCircle2, Layers } from "lucide-react";
+import {
+  Sparkles,
+  Paperclip,
+  X,
+  CheckCircle2,
+  Layers,
+  BadgeCheck,
+  ListChecks,
+} from "lucide-react";
+import { Link } from "react-router-dom";
+import { useWeb3 } from "@/contexts/web3-context";
+import { contractService } from "@/lib/web3/contract-service";
 import { useToast } from "@/hooks/use-toast";
 import {
   isApiConfigured,
@@ -21,6 +32,11 @@ import {
   type UploadedFile,
 } from "@/lib/api";
 import { CONTRACTS } from "@/lib/web3/config";
+import {
+  getAutopilotInfo,
+  getAutopilotJob,
+  type AutopilotJob,
+} from "@/lib/autopilot";
 
 interface MilestonePreview {
   description: string;
@@ -49,6 +65,35 @@ export function ApplicationDialog({
   applying,
 }: ApplicationDialogProps) {
   const { toast } = useToast();
+  const { wallet } = useWeb3();
+  // Unverified freelancers get a pointer to verification here, since the
+  // Freelancer menu only appears after their first application.
+  const [verified, setVerified] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (!open || !wallet.address) return;
+    contractService
+      .isFreelancerVerified(wallet.address)
+      .then(setVerified)
+      .catch(() => setVerified(null));
+  }, [open, wallet.address]);
+  // Jobs run by Autopilot publish the criteria applicants are ranked and
+  // judged by, and give verified freelancers a fixed edge in that ranking.
+  const [autopilot, setAutopilot] = useState<AutopilotJob | null>(null);
+  const [verifiedEdge, setVerifiedEdge] = useState(10);
+  useEffect(() => {
+    if (!open || !job || !isApiConfigured()) return;
+    let cancelled = false;
+    void Promise.all([getAutopilotJob(Number(job.id)), getAutopilotInfo()])
+      .then(([j, info]) => {
+        if (cancelled) return;
+        setAutopilot(j.managed ? j : null);
+        if (info) setVerifiedEdge(info.verifiedEdge);
+      })
+      .catch(() => !cancelled && setAutopilot(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [open, job]);
   const [coverLetter, setCoverLetter] = useState("");
   const [proposedTimeline, setProposedTimeline] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
@@ -166,9 +211,17 @@ export function ApplicationDialog({
         setUploadedFile(result);
         fileUrl = result.url;
       } catch (e) {
+        const raw = e instanceof Error ? e.message : "";
+        // "fetch failed" comes from the backend when its file storage
+        // (Supabase) is unreachable; the application itself would still work.
+        const storageDown = /fetch failed|not configured|503|storage/i.test(
+          raw,
+        );
         toast({
-          title: "Upload failed",
-          description: e instanceof Error ? e.message : "Could not upload file",
+          title: "Attachment couldn't be uploaded",
+          description: storageDown
+            ? "File storage is unavailable right now. Remove the attachment to apply without it, or try again later."
+            : raw || "Could not upload the file. Please try again.",
           variant: "destructive",
         });
         setUploading(false);
@@ -244,6 +297,27 @@ export function ApplicationDialog({
               </div>
             ) : null}
           </div>
+
+          {autopilot?.criteria && autopilot.criteria.length > 0 && (
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
+              <Label className="mb-1.5 flex items-center gap-1.5">
+                <ListChecks className="h-3.5 w-3.5 text-amber-500" />
+                How this job is judged
+              </Label>
+              <ol className="list-decimal space-y-1 pl-5 text-sm text-muted-foreground">
+                {autopilot.criteria.map((c, i) => (
+                  <li key={i}>{c}</li>
+                ))}
+              </ol>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Applicants are ranked side by side on how well they fit these
+                {verified === true
+                  ? " — your verified identity gives you an edge."
+                  : `, and verified freelancers get +${verifiedEdge} points.`}{" "}
+                Address them in your cover letter and link your past work.
+              </p>
+            </div>
+          )}
 
           <div>
             <div className="flex items-center justify-between gap-2 mb-2">
@@ -349,6 +423,25 @@ export function ApplicationDialog({
             </div>
           )}
         </div>
+
+        {verified === false && (
+          <p className="flex items-center gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-xs text-muted-foreground">
+            <BadgeCheck className="h-4 w-4 shrink-0 text-emerald-500" />
+            <span>
+              {autopilot
+                ? `Verified freelancers get +${verifiedEdge} points when applicants are ranked for this job.`
+                : "Verified freelancers stand out to clients."}{" "}
+              <Link
+                to="/freelancer"
+                className="font-medium text-primary hover:underline"
+                onClick={() => onOpenChange(false)}
+              >
+                Verify your identity
+              </Link>{" "}
+              (about 2 minutes).
+            </span>
+          </p>
+        )}
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>

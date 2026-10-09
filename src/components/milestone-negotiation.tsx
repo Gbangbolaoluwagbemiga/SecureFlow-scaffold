@@ -8,7 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useWeb3 } from "@/contexts/web3-context";
 import { contractService } from "@/lib/web3/contract-service";
 import { Check, X, Edit, MessageSquare } from "lucide-react";
-import { translateContractError } from "@/components/job-management";
+import { translateContractError } from "@/lib/web3/contract-errors";
 
 interface MilestoneNegotiationProps {
   escrowId: string;

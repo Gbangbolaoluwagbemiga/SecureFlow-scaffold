@@ -1,9 +1,16 @@
-use crate::admin;
-use crate::escrow_core;
-use crate::storage_types::{Application, DataKey, EscrowStatus, SecureFlowError, INSTANCE_BUMP_AMOUNT, INSTANCE_LIFETIME_THRESHOLD};
-use soroban_sdk::{Env, Address, String, Vec, Error};
+//! Open jobs: applying and hiring.
 
-const MAX_APPLICATIONS: u32 = 50;
+use crate::admin;
+use crate::escrow_core as core;
+use crate::events;
+use crate::storage_types::{
+    Application, DataKey, EscrowStatus, SecureFlowError, SfResult, MAX_APPLICATIONS,
+};
+use soroban_sdk::{Address, Env, String, Vec};
+
+fn applicants(env: &Env, escrow_id: u32) -> Vec<Address> {
+    core::p_get(env, &DataKey::Applicants(escrow_id)).unwrap_or(Vec::new(env))
+}
 
 pub fn apply_to_job(
     env: &Env,
@@ -11,217 +18,151 @@ pub fn apply_to_job(
     freelancer: Address,
     cover_letter: String,
     proposed_timeline: u32,
-) -> Result<(), Error> {
-    // Require auth from the freelancer address
-    // The freelancer must sign the transaction
+) -> SfResult<()> {
     freelancer.require_auth();
-
     admin::require_not_paused(env)?;
-
-    // Check if job creation is paused
     if admin::is_job_creation_paused(env) {
-        return Err(Error::from_contract_error(SecureFlowError::JobCreationPaused as u32));
+        return Err(SecureFlowError::JobCreationPaused);
     }
-
-    // Validate escrow
-    escrow_core::require_valid_escrow(env, escrow_id)?;
-    let escrow = escrow_core::get_escrow(env, escrow_id)
-        .ok_or_else(|| Error::from_contract_error(SecureFlowError::EscrowNotFound as u32))?;
-
-    // Validate escrow is an open job
+    let escrow = core::load_escrow(env, escrow_id)?;
     if !escrow.is_open_job {
-        return Err(Error::from_contract_error(SecureFlowError::NotOpenJob as u32));
+        return Err(SecureFlowError::NotOpenJob);
     }
-
-    if escrow.status != EscrowStatus::Pending {
-        return Err(Error::from_contract_error(SecureFlowError::JobClosed as u32));
+    if escrow.status != EscrowStatus::Pending || escrow.beneficiary.is_some() {
+        return Err(SecureFlowError::JobClosed);
     }
-
     if escrow.depositor == freelancer {
-        return Err(Error::from_contract_error(SecureFlowError::CannotApplyToOwnJob as u32));
+        return Err(SecureFlowError::CannotApplyToOwnJob);
+    }
+    if core::get_job_manager(env, escrow_id).as_ref() == Some(&freelancer) {
+        return Err(SecureFlowError::ManagerCannotSelfHire);
+    }
+    if escrow.arbiters.contains(&freelancer) {
+        return Err(SecureFlowError::ArbiterIsParty);
+    }
+    let key = DataKey::Application(escrow_id, freelancer.clone());
+    if core::p_has(env, &key) {
+        return Err(SecureFlowError::AlreadyApplied);
+    }
+    let mut list = applicants(env, escrow_id);
+    if list.len() >= MAX_APPLICATIONS {
+        return Err(SecureFlowError::TooManyApplications);
     }
 
-    // Check if already applied
-    if has_applied(env, escrow_id, freelancer.clone()) {
-        return Err(Error::from_contract_error(SecureFlowError::AlreadyApplied as u32));
-    }
+    core::p_set(
+        env,
+        &key,
+        &Application {
+            freelancer: freelancer.clone(),
+            cover_letter,
+            proposed_timeline,
+            applied_at: env.ledger().sequence(),
+        },
+    );
+    list.push_back(freelancer.clone());
+    core::freelancer_applications_add(env, freelancer.clone(), escrow_id);
+    core::p_set(env, &DataKey::Applicants(escrow_id), &list);
 
-    // Find the first available slot and count existing applications
-    env.storage()
-        .instance()
-        .extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
-    
-    let mut application_count = 0u32;
-    let mut next_available_index: Option<u32> = None;
-    
-    // Check all possible application indices to find first empty slot
-    for app_index in 0..MAX_APPLICATIONS {
-        let key = DataKey::Application(escrow_id, app_index);
-        if let Some(_existing_app) = env.storage().instance().get::<DataKey, Application>(&key) {
-            application_count += 1;
-        } else if next_available_index.is_none() {
-            next_available_index = Some(app_index);
-        }
-    }
-    
-    // Check if we've reached max applications
-    if application_count >= MAX_APPLICATIONS {
-        return Err(Error::from_contract_error(SecureFlowError::TooManyApplications as u32));
-    }
-    
-    // Get the next available index (should always be Some at this point)
-    let application_index = next_available_index
-        .ok_or_else(|| Error::from_contract_error(SecureFlowError::TooManyApplications as u32))?;
-
-    // Create application
-    let application = Application {
-        freelancer: freelancer.clone(),
-        cover_letter,
+    events::ApplicationSubmitted {
+        escrow_id,
+        depositor: escrow.depositor,
+        freelancer,
         proposed_timeline,
-        applied_at: env.ledger().sequence(),
-    };
-
-    // Save application at the next available index
-    env.storage()
-        .instance()
-        .set(&DataKey::Application(escrow_id, application_index), &application);
-    
+    }
+    .publish(env);
     Ok(())
 }
 
-pub fn accept_freelancer(env: &Env, escrow_id: u32, depositor: Address, freelancer: Address) -> Result<(), Error> {
-    depositor.require_auth();
+/// Hire a freelancer for a job that has nobody on it. `caller` is the client
+/// or their job manager.
+///
+/// "Nobody is on this job" rather than "this job is open": the two agree for
+/// open jobs, but a job whose named freelancer declined has nobody on it and
+/// is not open, and the client must be able to fill it without first pushing
+/// it to the board.
+pub fn accept_freelancer(
+    env: &Env,
+    escrow_id: u32,
+    caller: Address,
+    freelancer: Address,
+) -> SfResult<()> {
+    caller.require_auth();
     admin::require_not_paused(env)?;
-
-    escrow_core::require_valid_escrow(env, escrow_id)?;
-    let mut escrow = escrow_core::get_escrow(env, escrow_id)
-        .ok_or_else(|| Error::from_contract_error(SecureFlowError::EscrowNotFound as u32))?;
-
-    if escrow.depositor != depositor {
-        return Err(Error::from_contract_error(SecureFlowError::OnlyDepositor as u32));
-    }
-
-    if !escrow.is_open_job {
-        return Err(Error::from_contract_error(SecureFlowError::NotOpenJob as u32));
-    }
-
+    let mut escrow = core::load_escrow(env, escrow_id)?;
+    core::require_depositor_or_manager(env, &escrow, escrow_id, &caller)?;
     if escrow.status != EscrowStatus::Pending {
-        return Err(Error::from_contract_error(SecureFlowError::JobClosed as u32));
+        return Err(SecureFlowError::JobClosed);
+    }
+    if escrow.beneficiary.is_some() {
+        return Err(SecureFlowError::JobAlreadyAssigned);
+    }
+    let applied = core::p_has(env, &DataKey::Application(escrow_id, freelancer.clone()));
+    let declined = core::p_get::<bool>(env, &DataKey::Declined(escrow_id, freelancer.clone()))
+        .unwrap_or(false);
+    if !applied && !declined {
+        // The old version had a `TODO: Check if freelancer applied` here and
+        // would hire any address at all.
+        return Err(SecureFlowError::FreelancerNotApplied);
+    }
+    // THE ONE-WAY KEY, second enforcement point. On an open job the freelancer
+    // is only known now, after the manager was appointed — so a manager could
+    // otherwise hire itself and approve its own milestones.
+    if core::get_job_manager(env, escrow_id).as_ref() == Some(&freelancer) {
+        return Err(SecureFlowError::ManagerCannotSelfHire);
+    }
+    if freelancer == escrow.depositor {
+        return Err(SecureFlowError::SelfDealing);
+    }
+    if escrow.arbiters.contains(&freelancer) {
+        return Err(SecureFlowError::ArbiterIsParty);
     }
 
-    // TODO: Check if freelancer applied
-
-    // Accept freelancer
     escrow.beneficiary = Some(freelancer.clone());
     escrow.is_open_job = false;
+    core::open_jobs_remove(env, escrow_id);
+    core::save_escrow(env, escrow_id, &escrow);
+    core::add_user_escrow(env, freelancer.clone(), escrow_id);
 
-    // Save updated escrow
-    escrow_core::save_escrow(env, escrow_id, &escrow);
-
-    // Add to user escrows
-    escrow_core::add_user_escrow(env, freelancer, escrow_id);
-    
+    events::FreelancerAccepted {
+        escrow_id,
+        freelancer,
+        accepted_by: caller,
+    }
+    .publish(env);
     Ok(())
 }
 
-/// Check if a freelancer has applied to a job
 pub fn has_applied(env: &Env, escrow_id: u32, freelancer: Address) -> bool {
-    env.storage()
-        .instance()
-        .extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
-    
-    // Check all possible application indices (0 to MAX_APPLICATIONS - 1)
-    for app_index in 0..MAX_APPLICATIONS {
-        let key = DataKey::Application(escrow_id, app_index);
-        if let Some(application) = env.storage().instance().get::<DataKey, Application>(&key) {
-            if application.freelancer == freelancer {
-                return true;
-            }
-        }
-    }
-    
-    false
+    core::p_has(env, &DataKey::Application(escrow_id, freelancer))
 }
 
-/// Get an application by escrow_id and freelancer
 pub fn get_application(env: &Env, escrow_id: u32, freelancer: Address) -> Option<Application> {
-    env.storage()
-        .instance()
-        .extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
-    
-    // Check all possible application indices
-    for app_index in 0..MAX_APPLICATIONS {
-        let key = DataKey::Application(escrow_id, app_index);
-        if let Some(application) = env.storage().instance().get::<DataKey, Application>(&key) {
-            if application.freelancer == freelancer {
-                return Some(application);
-            }
-        }
-    }
-    
-    None
+    core::p_get(env, &DataKey::Application(escrow_id, freelancer))
 }
 
-/// Get all applications for an escrow
 pub fn get_applications(env: &Env, escrow_id: u32) -> Vec<Application> {
-    env.storage()
-        .instance()
-        .extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
-
-    let mut applications = Vec::new(env);
-
-    // Check all possible application indices
-    for app_index in 0..MAX_APPLICATIONS {
-        let key = DataKey::Application(escrow_id, app_index);
-        if let Some(application) = env.storage().instance().get::<DataKey, Application>(&key) {
-            applications.push_back(application);
-        }
-    }
-
-    applications
+    get_applications_page(env, escrow_id, 0, MAX_APPLICATIONS)
 }
 
-/// Get a page of applications for an escrow.
-/// `offset` is the zero-based starting position; `limit` is the max entries to return.
-pub fn get_applications_page(env: &Env, escrow_id: u32, offset: u32, limit: u32) -> Vec<Application> {
-    env.storage()
-        .instance()
-        .extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
-
-    let mut result = Vec::new(env);
-    let mut seen: u32 = 0;
-    let mut returned: u32 = 0;
-
-    for app_index in 0..MAX_APPLICATIONS {
-        if returned >= limit {
-            break;
-        }
-        let key = DataKey::Application(escrow_id, app_index);
-        if let Some(application) = env.storage().instance().get::<DataKey, Application>(&key) {
-            if seen >= offset {
-                result.push_back(application);
-                returned += 1;
+pub fn get_applications_page(
+    env: &Env,
+    escrow_id: u32,
+    offset: u32,
+    limit: u32,
+) -> Vec<Application> {
+    let mut out = Vec::new(env);
+    let list = applicants(env, escrow_id);
+    let end = offset.saturating_add(limit).min(list.len());
+    for i in offset..end {
+        if let Some(addr) = list.get(i) {
+            if let Some(app) = get_application(env, escrow_id, addr) {
+                out.push_back(app);
             }
-            seen += 1;
         }
     }
-
-    result
+    out
 }
 
-/// Return the total number of applications for an escrow.
 pub fn get_application_count(env: &Env, escrow_id: u32) -> u32 {
-    env.storage()
-        .instance()
-        .extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
-
-    let mut count: u32 = 0;
-    for app_index in 0..MAX_APPLICATIONS {
-        let key = DataKey::Application(escrow_id, app_index);
-        if env.storage().instance().has(&key) {
-            count += 1;
-        }
-    }
-    count
+    applicants(env, escrow_id).len()
 }
-

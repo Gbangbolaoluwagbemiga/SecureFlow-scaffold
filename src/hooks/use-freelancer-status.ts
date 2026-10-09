@@ -1,63 +1,41 @@
 import { useState, useEffect, useCallback } from "react";
 import { useWeb3 } from "@/contexts/web3-context";
-import { CONTRACTS } from "@/lib/web3/config";
+import { contractService } from "@/lib/web3/contract-service";
 
-export function useFreelancerStatus() {
+/**
+ * Is this wallet acting as a freelancer: has it applied to a job, or been
+ * named as the freelancer on one (direct hires never apply)?
+ *
+ * Two index reads instead of probing escrow ids one call at a time. Re-checks
+ * when `recheckKey` changes, so the navbar picks up a first application as
+ * soon as the user navigates.
+ */
+export function useFreelancerStatus(recheckKey?: string) {
   const { wallet } = useWeb3();
   const [isFreelancer, setIsFreelancer] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const checkFreelancerStatus = useCallback(async () => {
+  const check = useCallback(async () => {
     if (!wallet.isConnected || !wallet.address) {
       setIsFreelancer(false);
-      setLoading(false);
       return;
     }
-
     setLoading(true);
     try {
-      // Use ContractService instead of contract.call - it reads from blockchain
-      const { ContractService } = await import("@/lib/web3/contract-service");
-      const contractService = new ContractService(CONTRACTS.SECUREFLOW_ESCROW);
-
-      // Get next escrow ID from blockchain (not hardcoded)
-      const nextEscrowId = await contractService.getNextEscrowId();
-
-      // Check if current wallet is beneficiary of any escrow
-      const maxEscrowsToCheck = Math.min(nextEscrowId - 1, 20);
-      for (let i = 1; i <= maxEscrowsToCheck; i++) {
-        try {
-          const escrow = await contractService.getEscrow(i);
-
-          if (!escrow) {
-            if (i > 5) {
-              // Stop checking after a few non-existent escrows
-              break;
-            }
-            continue;
-          }
-
-          // Check if current user is the beneficiary (freelancer)
-          const isBeneficiary =
-            escrow.freelancer &&
-            escrow.freelancer.toLowerCase().trim() ===
-              wallet.address.toLowerCase().trim();
-
-          if (isBeneficiary) {
-            setIsFreelancer(true);
-            setLoading(false);
-            return;
-          }
-        } catch (error) {
-          if (i > 5) {
-            break;
-          }
-          continue;
-        }
+      const me = wallet.address;
+      const [applied, myEscrowIds] = await Promise.all([
+        contractService.getFreelancerApplicationIds(me),
+        contractService.getUserEscrows(me),
+      ]);
+      if (applied.length > 0) {
+        setIsFreelancer(true);
+        return;
       }
-
-      setIsFreelancer(false);
-    } catch (error) {
+      const escrows = await contractService.getEscrowsBatch(
+        myEscrowIds.map(Number),
+      );
+      setIsFreelancer(escrows.some((e) => e.freelancer === me));
+    } catch {
       setIsFreelancer(false);
     } finally {
       setLoading(false);
@@ -65,8 +43,8 @@ export function useFreelancerStatus() {
   }, [wallet.isConnected, wallet.address]);
 
   useEffect(() => {
-    checkFreelancerStatus();
-  }, [checkFreelancerStatus]);
+    void check();
+  }, [check, recheckKey]);
 
   return { isFreelancer, loading };
 }

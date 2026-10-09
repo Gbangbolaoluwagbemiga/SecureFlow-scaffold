@@ -1,0 +1,28 @@
+<!--
+  SecureFlow mark: a water drop with the S carved through it.
+  The S is also the waterline — shallow water on one side, deep on the other —
+  so the letter and the flow are the same line. The S is a true cut-out
+  (mask), so it always shows whatever the mark sits on.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="13 5 38 53" fill="none">
+  <defs>
+    <linearGradient id="sfm-shallow" x1="22" y1="8" x2="36" y2="44" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#67E8F9"/>
+      <stop offset="1" stop-color="#06B6D4"/>
+    </linearGradient>
+    <linearGradient id="sfm-deep" x1="44" y1="26" x2="26" y2="58" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2563EB"/>
+      <stop offset="1" stop-color="#172554"/>
+    </linearGradient>
+    <clipPath id="sfm-drop"><path d="M32 6.5C32 6.5 15 25.5 15 39.5A17 17 0 0 0 49 39.5C49 25.5 32 6.5 32 6.5Z"/></clipPath>
+    <mask id="sfm-carve" maskUnits="userSpaceOnUse" x="0" y="0" width="64" height="64">
+      <rect width="64" height="64" fill="#fff"/>
+      <path d="M38.8 26.2C34.8 22.6 25.6 23.4 25.6 29.6C25.6 35.4 38.6 34.4 38.6 42C38.6 48.4 29.2 50 24.6 46" stroke="#000" stroke-width="5" stroke-linecap="round"/>
+    </mask>
+  </defs>
+  <g clip-path="url(#sfm-drop)" mask="url(#sfm-carve)">
+    <rect width="64" height="64" fill="url(#sfm-deep)"/>
+    <path d="M50 18L38.8 26.2C34.8 22.6 25.6 23.4 25.6 29.6C25.6 35.4 38.6 34.4 38.6 42C38.6 48.4 29.2 50 24.6 46L8 58H0V0H64V18Z" fill="url(#sfm-shallow)"/>
+  </g>
+  <path d="M18.6 41.5C18.3 37.6 19.2 33.4 21.1 29.6" stroke="#FFFFFF" stroke-opacity=".7" stroke-width="1.8" stroke-linecap="round"/>
+</svg>

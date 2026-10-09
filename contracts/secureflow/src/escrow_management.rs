@@ -1,110 +1,116 @@
-use crate::admin;
-use crate::escrow_core;
-use crate::storage_types::{
-    DataKey, EscrowData, EscrowStatus, MilestoneStatus, SecureFlowError,
-    INSTANCE_BUMP_AMOUNT, INSTANCE_LIFETIME_THRESHOLD,
-};
-use soroban_sdk::{token, Address, Env, String, Vec, Error};
+//! Creating escrows, and everything a client can change before work starts.
 
+use crate::admin;
+use crate::escrow_core::{self as core, add, add_u32, sub};
+use crate::events;
+use crate::storage_types::{
+    DataKey, EscrowData, EscrowStatus, MilestoneStatus, SecureFlowError, SfResult, MAX_ARBITERS,
+    MAX_DURATION_SECONDS, MAX_MILESTONES, MIN_DURATION_SECONDS,
+};
+use soroban_sdk::{Address, Env, String, Vec};
+
+// ─── Creation ────────────────────────────────────────────────────────────────
+
+/// Validate a milestone list and return its total.
+fn milestone_total(milestones: &Vec<(i128, String)>) -> SfResult<i128> {
+    if milestones.is_empty() {
+        return Err(SecureFlowError::NoMilestones);
+    }
+    if milestones.len() > MAX_MILESTONES {
+        return Err(SecureFlowError::TooManyMilestones);
+    }
+    let mut total: i128 = 0;
+    for (amount, _) in milestones.iter() {
+        if amount <= 0 {
+            return Err(SecureFlowError::ZeroMilestoneAmount);
+        }
+        total = add(total, amount)?;
+    }
+    Ok(total)
+}
+
+/// Write a fresh milestone list at indexes `0..len`.
+fn save_new_milestones(env: &Env, escrow_id: u32, milestones: &Vec<(i128, String)>) {
+    for (index, (amount, text)) in (0_u32..).zip(milestones.iter()) {
+        core::save_milestone(env, escrow_id, index, &core::new_milestone(amount, text));
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 pub fn create_escrow(
     env: &Env,
     depositor: Address,
     beneficiary: Option<Address>,
     arbiters: Vec<Address>,
     required_confirmations: u32,
-    milestone_amounts: Vec<i128>,
-    milestone_descriptions: Vec<String>,
+    milestones: Vec<(i128, String)>,
     token: Option<Address>,
     total_amount: i128,
     duration: u32,
     project_title: String,
     project_description: String,
-) -> Result<u32, Error> {
-    // Require auth
+) -> SfResult<u32> {
     depositor.require_auth();
-
-    // Check if job creation is paused
+    admin::require_not_paused(env)?;
     if admin::is_job_creation_paused(env) {
-        return Err(Error::from_contract_error(SecureFlowError::JobCreationPaused as u32));
+        return Err(SecureFlowError::JobCreationPaused);
     }
 
-    // Validate parameters
-    if duration < 3600 || duration > 31536000 {
-        // 1 hour to 365 days
-        return Err(Error::from_contract_error(SecureFlowError::InvalidDuration as u32));
+    // ── All input checks happen before any money moves ──
+    if !(MIN_DURATION_SECONDS..=MAX_DURATION_SECONDS).contains(&duration) {
+        return Err(SecureFlowError::InvalidDuration);
+    }
+    if total_amount <= 0 {
+        return Err(SecureFlowError::InvalidAmount);
+    }
+    if milestone_total(&milestones)? != total_amount {
+        // Milestones summing to the total is what lets "every milestone paid"
+        // mean "escrow complete". The old contract never checked, so a job
+        // could be funded for less than its milestones promised.
+        return Err(SecureFlowError::MilestoneSumMismatch);
+    }
+    if let Some(b) = &beneficiary {
+        if b == &depositor {
+            return Err(SecureFlowError::SelfDealing);
+        }
+        if b == &env.current_contract_address() {
+            return Err(SecureFlowError::InvalidAddress);
+        }
+    }
+    if arbiters.len() > MAX_ARBITERS {
+        return Err(SecureFlowError::TooManyArbiters);
+    }
+    for a in arbiters.iter() {
+        if a == depositor || beneficiary.as_ref() == Some(&a) {
+            return Err(SecureFlowError::ArbiterIsParty);
+        }
+        if arbiters.first_index_of(&a) != arbiters.last_index_of(&a) {
+            return Err(SecureFlowError::DuplicateArbiter);
+        }
+    }
+    let confirmations = required_confirmations.max(1);
+    if !arbiters.is_empty() && confirmations > arbiters.len() {
+        return Err(SecureFlowError::InvalidConfirmations);
+    }
+    if !core::is_whitelisted_token(env, token.clone()) {
+        return Err(SecureFlowError::TokenNotWhitelisted);
     }
 
-    if milestone_amounts.len() != milestone_descriptions.len() {
-        return Err(Error::from_contract_error(SecureFlowError::MilestoneCountMismatch as u32));
-    }
+    // ── Fund ──
+    let platform_fee = core::calculate_fee(env, total_amount)?;
+    let deposit = add(total_amount, platform_fee)?;
+    let escrow_id = core::increment_next_escrow_id(env)?;
+    core::pull_in(env, token.as_ref(), &depositor, deposit)?;
+    core::liabilities_add(env, token.as_ref(), deposit)?;
 
-    if milestone_amounts.len() > 20 {
-        return Err(Error::from_contract_error(SecureFlowError::TooManyMilestones as u32));
-    }
-
-    if arbiters.len() > 5 {
-        return Err(Error::from_contract_error(SecureFlowError::TooManyArbiters as u32));
-    }
-
-    if required_confirmations > arbiters.len() as u32 {
-        return Err(Error::from_contract_error(SecureFlowError::InvalidConfirmations as u32));
-    }
-
-    // Check token whitelist
-    if !escrow_core::is_whitelisted_token(env, token.clone()) {
-        return Err(Error::from_contract_error(SecureFlowError::TokenNotWhitelisted as u32));
-    }
-
-    // Calculate platform fee
-    let platform_fee = escrow_core::calculate_fee(env, total_amount);
-
-    // Calculate deadline
-    let current_ledger = env.ledger().sequence();
-    let deadline = current_ledger + (duration as u32) / 5; // Approximate conversion
-
-    // Get next escrow ID
-    let escrow_id = escrow_core::increment_next_escrow_id(env);
-
-    // Calculate token key first (before moving token)
-    let token_key = token.as_ref().map(|t| t.clone()).unwrap_or_else(|| env.current_contract_address());
-    
-    // Transfer funds
-    if let Some(token_addr) = &token {
-        // Transfer ERC20-like token
-        let token_client = token::Client::new(env, token_addr);
-        token_client.transfer(&depositor, &env.current_contract_address(), &total_amount);
-    } else {
-        // Transfer native XLM using Stellar Asset Contract (SAC)
-        // Native XLM SAC address for testnet
-        let native_token_str = String::from_str(env, "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC");
-        let native_token_address = Address::from_string(&native_token_str);
-        let native_token_client = token::Client::new(env, &native_token_address);
-        native_token_client.transfer(
-            &depositor,
-            &env.current_contract_address(),
-            &total_amount,
-        );
-    }
-    
-    let current_escrowed: i128 = env
-        .storage()
-        .instance()
-        .get(&DataKey::EscrowedAmount(token_key.clone()))
-        .unwrap_or(0);
-    env.storage()
-        .instance()
-        .extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
-    env.storage()
-        .instance()
-        .set(&DataKey::EscrowedAmount(token_key), &(current_escrowed + total_amount));
-
-    // Create escrow data
+    let now = env.ledger().sequence();
+    let deadline = add_u32(now, core::seconds_to_ledgers(duration))?;
     let is_open_job = beneficiary.is_none();
-    let escrow_data = EscrowData {
+    let escrow = EscrowData {
         depositor: depositor.clone(),
         beneficiary: beneficiary.clone(),
         arbiters,
-        required_confirmations,
+        required_confirmations: confirmations,
         token: token.clone(),
         total_amount,
         paid_amount: 0,
@@ -112,446 +118,514 @@ pub fn create_escrow(
         deadline,
         status: EscrowStatus::Pending,
         work_started: false,
-        created_at: current_ledger,
-        milestone_count: milestone_amounts.len() as u32,
+        created_at: now,
+        milestone_count: milestones.len(),
         is_open_job,
         project_title,
         project_description,
     };
+    core::save_escrow(env, escrow_id, &escrow);
+    save_new_milestones(env, escrow_id, &milestones);
 
-    // Save escrow
-    escrow_core::save_escrow(env, escrow_id, &escrow_data);
-
-    // Save milestones
-    for (i, (amount, description)) in milestone_amounts.iter().zip(milestone_descriptions.iter()).enumerate() {
-        let milestone = crate::storage_types::Milestone {
-            description: description.clone(),
-            requirements: description.clone(), // permanent copy of original requirements
-            amount,
-            status: crate::storage_types::MilestoneStatus::NotStarted,
-            submitted_at: 0,
-            approved_at: 0,
-            disputed_at: 0,
-            disputed_by: None,
-            dispute_reason: None,
-            rejection_reason: None,
-            resolved_at: 0,
-            resolved_by: None,
-            resolution_freelancer_amount: 0,
-            resolution_client_amount: 0,
-            resolution_reason: None,
-            proposed_amount: 0,
-            proposed_description: None,
-        };
-        env.storage()
-            .instance()
-            .extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
-        env.storage()
-            .instance()
-            .set(&DataKey::Milestone(escrow_id, i as u32), &milestone);
+    core::add_user_escrow(env, depositor.clone(), escrow_id);
+    if is_open_job {
+        core::open_jobs_add(env, escrow_id);
     }
-
-    // Add to user escrows
-    escrow_core::add_user_escrow(env, depositor.clone(), escrow_id);
-    if let Some(ben) = &beneficiary {
-        escrow_core::add_user_escrow(env, ben.clone(), escrow_id);
+    if let Some(b) = &beneficiary {
+        core::add_user_escrow(env, b.clone(), escrow_id);
     }
+    admin::bump_instance(env);
 
+    events::EscrowCreated {
+        escrow_id,
+        depositor,
+        beneficiary,
+        total_amount,
+        platform_fee,
+        token: core::token_address(env, token.as_ref()),
+        deadline,
+        milestone_count: escrow.milestone_count,
+        is_open_job,
+    }
+    .publish(env);
     Ok(escrow_id)
 }
 
-/// Add a new milestone to a Pending escrow (only before work starts).
+/// What a client must deposit to fund a job of `total_amount`.
+pub fn quote_deposit(env: &Env, total_amount: i128) -> SfResult<(i128, i128)> {
+    if total_amount <= 0 {
+        return Err(SecureFlowError::InvalidAmount);
+    }
+    let fee = core::calculate_fee(env, total_amount)?;
+    Ok((add(total_amount, fee)?, fee))
+}
+
+// ─── Before work starts ──────────────────────────────────────────────────────
+
+/// Load an escrow the depositor may still reshape: theirs, Pending, and not
+/// yet started by a freelancer. `work_started` is the line because it is the
+/// freelancer's own act — the first moment anyone is relying on the job.
+fn load_editable(env: &Env, escrow_id: u32, depositor: &Address) -> SfResult<EscrowData> {
+    depositor.require_auth();
+    admin::require_not_paused(env)?;
+    let escrow = core::load_escrow(env, escrow_id)?;
+    core::require_depositor(&escrow, depositor)?;
+    if escrow.work_started {
+        return Err(SecureFlowError::CannotModifyStartedEscrow);
+    }
+    if escrow.status != EscrowStatus::Pending {
+        return Err(SecureFlowError::InvalidEscrowStatus);
+    }
+    Ok(escrow)
+}
+
+fn emit_funds_updated(env: &Env, escrow_id: u32, escrow: &EscrowData, old_total: i128) {
+    events::JobFundsUpdated {
+        escrow_id,
+        beneficiary: escrow.beneficiary.clone(),
+        old_total,
+        new_total: escrow.total_amount,
+        milestone_count: escrow.milestone_count,
+    }
+    .publish(env);
+}
+
+/// Grow the job by `amount`, collecting the matching fee share. Mutates
+/// `escrow` totals; the caller saves.
+fn grow(env: &Env, escrow: &mut EscrowData, depositor: &Address, amount: i128) -> SfResult<()> {
+    let fee = core::fee_share(escrow, amount)?;
+    let deposit = add(amount, fee)?;
+    core::pull_in(env, escrow.token.as_ref(), depositor, deposit)?;
+    core::liabilities_add(env, escrow.token.as_ref(), deposit)?;
+    escrow.total_amount = add(escrow.total_amount, amount)?;
+    escrow.platform_fee = add(escrow.platform_fee, fee)?;
+    Ok(())
+}
+
+/// Shrink the job by `amount`, returning it plus its fee share. Mutates
+/// `escrow` totals; the caller saves (before or after — the transfer here is
+/// to the depositor, who already authorised the call).
+fn shrink(env: &Env, escrow: &mut EscrowData, amount: i128) -> SfResult<()> {
+    let fee = core::fee_share(escrow, amount)?;
+    let refund = add(amount, fee)?;
+    escrow.total_amount = sub(escrow.total_amount, amount)?;
+    escrow.platform_fee = sub(escrow.platform_fee, fee)?;
+    core::liabilities_sub(env, escrow.token.as_ref(), refund)?;
+    core::pay_out(env, escrow.token.as_ref(), &escrow.depositor, refund)
+}
+
+/// A full rewrite is only safe while every milestone is untouched. A job
+/// reopened after arbitration can be Pending with paid or resolved milestones;
+/// rewriting the list there would erase that history and re-promise money
+/// already paid out.
+fn require_all_untouched(env: &Env, escrow: &EscrowData, escrow_id: u32) -> SfResult<()> {
+    for i in 0..escrow.milestone_count {
+        if let Some(m) = core::get_milestone(env, escrow_id, i) {
+            match m.status {
+                MilestoneStatus::NotStarted => {}
+                MilestoneStatus::ProposalPending => {
+                    return Err(SecureFlowError::PendingProposalExists)
+                }
+                _ => return Err(SecureFlowError::MilestoneAlreadyStarted),
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Add a milestone, depositing its amount plus fee share.
+///
+/// The old version wrote the milestone without moving any money, so the
+/// milestones then promised more than the escrow held and the job could never
+/// complete.
 pub fn add_milestone(
     env: &Env,
     escrow_id: u32,
     amount: i128,
     description: String,
     depositor: Address,
-) -> Result<(), Error> {
-    depositor.require_auth();
-    admin::require_not_paused(env)?;
-
-    escrow_core::require_valid_escrow(env, escrow_id)?;
-    let mut escrow = escrow_core::get_escrow(env, escrow_id)
-        .ok_or_else(|| Error::from_contract_error(SecureFlowError::EscrowNotFound as u32))?;
-
-    if escrow.depositor != depositor {
-        return Err(Error::from_contract_error(SecureFlowError::OnlyDepositor as u32));
+) -> SfResult<()> {
+    let mut escrow = load_editable(env, escrow_id, &depositor)?;
+    if escrow.milestone_count >= MAX_MILESTONES {
+        return Err(SecureFlowError::TooManyMilestones);
     }
-
-    if escrow.work_started {
-        return Err(Error::from_contract_error(SecureFlowError::CannotModifyStartedEscrow as u32));
-    }
-
-    if escrow.status != EscrowStatus::Pending {
-        return Err(Error::from_contract_error(SecureFlowError::InvalidEscrowStatus as u32));
-    }
-
-    if escrow.milestone_count >= 20 {
-        return Err(Error::from_contract_error(SecureFlowError::TooManyMilestones as u32));
-    }
-
     if amount <= 0 {
-        return Err(Error::from_contract_error(SecureFlowError::InvalidAmount as u32));
+        return Err(SecureFlowError::ZeroMilestoneAmount);
     }
-
-    let new_index = escrow.milestone_count;
-    let milestone = crate::storage_types::Milestone {
-        requirements: description.clone(),
-        description,
-        amount,
-        status: crate::storage_types::MilestoneStatus::NotStarted,
-        submitted_at: 0,
-        approved_at: 0,
-        disputed_at: 0,
-        disputed_by: None,
-        dispute_reason: None,
-        rejection_reason: None,
-        resolved_at: 0,
-        resolved_by: None,
-        resolution_freelancer_amount: 0,
-        resolution_client_amount: 0,
-        resolution_reason: None,
-        proposed_amount: 0,
-        proposed_description: None,
-    };
-
-    env.storage()
-        .instance()
-        .extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
-    env.storage()
-        .instance()
-        .set(&DataKey::Milestone(escrow_id, new_index), &milestone);
-
+    let old_total = escrow.total_amount;
+    grow(env, &mut escrow, &depositor, amount)?;
+    core::save_milestone(
+        env,
+        escrow_id,
+        escrow.milestone_count,
+        &core::new_milestone(amount, description),
+    );
     escrow.milestone_count += 1;
-    escrow_core::save_escrow(env, escrow_id, &escrow);
+    core::save_escrow(env, escrow_id, &escrow);
+    emit_funds_updated(env, escrow_id, &escrow, old_total);
     Ok(())
 }
 
-/// Remove a milestone from a Pending escrow (only before work starts).
-/// Shifts subsequent milestones down to fill the gap. Cannot remove the last milestone.
+/// Remove a milestone and refund its amount plus fee share. Later milestones
+/// shift down one index.
 pub fn remove_milestone(
     env: &Env,
     escrow_id: u32,
     milestone_index: u32,
     depositor: Address,
-) -> Result<(), Error> {
-    depositor.require_auth();
-    admin::require_not_paused(env)?;
-
-    escrow_core::require_valid_escrow(env, escrow_id)?;
-    let mut escrow = escrow_core::get_escrow(env, escrow_id)
-        .ok_or_else(|| Error::from_contract_error(SecureFlowError::EscrowNotFound as u32))?;
-
-    if escrow.depositor != depositor {
-        return Err(Error::from_contract_error(SecureFlowError::OnlyDepositor as u32));
-    }
-
-    if escrow.work_started {
-        return Err(Error::from_contract_error(SecureFlowError::CannotModifyStartedEscrow as u32));
-    }
-
-    if escrow.status != EscrowStatus::Pending {
-        return Err(Error::from_contract_error(SecureFlowError::InvalidEscrowStatus as u32));
-    }
-
+) -> SfResult<()> {
+    let mut escrow = load_editable(env, escrow_id, &depositor)?;
     if milestone_index >= escrow.milestone_count {
-        return Err(Error::from_contract_error(SecureFlowError::MilestoneIndexOutOfBounds as u32));
+        return Err(SecureFlowError::MilestoneIndexOutOfBounds);
     }
-
     if escrow.milestone_count <= 1 {
-        return Err(Error::from_contract_error(SecureFlowError::InvalidMilestone as u32));
+        return Err(SecureFlowError::CannotRemoveLastMilestone);
+    }
+    let removed = core::load_milestone(env, &escrow, escrow_id, milestone_index)?;
+    if removed.status != MilestoneStatus::NotStarted {
+        return Err(SecureFlowError::MilestoneAlreadyStarted);
     }
 
-    env.storage()
-        .instance()
-        .extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
-
-    // Shift all milestones after the removed index down by one
     let last = escrow.milestone_count - 1;
     for i in milestone_index..last {
-        let next_key = DataKey::Milestone(escrow_id, i + 1);
-        if let Some(next_m) = env
-            .storage()
-            .instance()
-            .get::<DataKey, crate::storage_types::Milestone>(&next_key)
-        {
-            env.storage()
-                .instance()
-                .set(&DataKey::Milestone(escrow_id, i), &next_m);
+        if let Some(next) = core::get_milestone(env, escrow_id, i + 1) {
+            core::save_milestone(env, escrow_id, i, &next);
         }
     }
+    core::p_remove(env, &DataKey::Milestone(escrow_id, last));
+    escrow.milestone_count = last;
 
-    // Remove the now-duplicate last slot
-    env.storage()
-        .instance()
-        .remove(&DataKey::Milestone(escrow_id, last));
-
-    escrow.milestone_count -= 1;
-    escrow_core::save_escrow(env, escrow_id, &escrow);
+    let old_total = escrow.total_amount;
+    shrink(env, &mut escrow, removed.amount)?;
+    core::save_escrow(env, escrow_id, &escrow);
+    emit_funds_updated(env, escrow_id, &escrow, old_total);
     Ok(())
 }
 
-// ─── Job cancellation ─────────────────────────────────────────────────────────
-
-/// Depositor cancels an open (unassigned) job and receives a refund minus a
-/// tiered cancellation penalty.
+/// Rewrite the whole milestone list in one call — add, remove, reorder,
+/// re-word — settling the change in total either way.
 ///
-/// Penalty tiers (based on lifetime effective cancellations):
-///   0–2 → 0 %   |   3–5 → 5 %   |   6–10 → 10 %   |   11+ → 15 %
-/// Plus an additional 0–15 % if the job had applications, capped at 30 %.
-/// Effective cancellations decay 1 per ~30 days without a new cancellation.
-pub fn cancel_job(env: &Env, escrow_id: u32, depositor: Address) -> Result<(), Error> {
-    depositor.require_auth();
-    admin::require_not_paused(env)?;
+/// Wholesale replacement is safe only because nothing has started: no index
+/// is in flight for submit, approve or dispute to be silently re-pointed by.
+/// For a single top-up, prefer `add_job_funds`: it takes a delta, so a caller
+/// working from a stale read cannot accidentally delete a stage.
+pub fn set_milestones(
+    env: &Env,
+    escrow_id: u32,
+    milestones: Vec<(i128, String)>,
+    depositor: Address,
+) -> SfResult<()> {
+    let mut escrow = load_editable(env, escrow_id, &depositor)?;
+    require_all_untouched(env, &escrow, escrow_id)?;
+    let new_total = milestone_total(&milestones)?;
+    let old_total = escrow.total_amount;
 
-    escrow_core::require_valid_escrow(env, escrow_id)?;
-    let mut escrow = escrow_core::get_escrow(env, escrow_id)
-        .ok_or_else(|| Error::from_contract_error(SecureFlowError::EscrowNotFound as u32))?;
-
-    if escrow.depositor != depositor {
-        return Err(Error::from_contract_error(SecureFlowError::OnlyDepositor as u32));
-    }
-    if !escrow.is_open_job {
-        return Err(Error::from_contract_error(SecureFlowError::CannotCancelAssignedJob as u32));
-    }
-    if escrow.status != EscrowStatus::Pending {
-        return Err(Error::from_contract_error(SecureFlowError::InvalidEscrowStatus as u32));
-    }
-
-    // Record cancellation before computing penalty (count includes this one)
-    let prev_cancellations: u32 = env
-        .storage()
-        .instance()
-        .get(&DataKey::UserCancellations(depositor.clone()))
-        .unwrap_or(0);
-    let new_count = prev_cancellations + 1;
-    env.storage()
-        .instance()
-        .extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
-    env.storage()
-        .instance()
-        .set(&DataKey::UserCancellations(depositor.clone()), &new_count);
-    env.storage()
-        .instance()
-        .set(&DataKey::LastCancellationLedger(depositor.clone()), &env.ledger().sequence());
-
-    let penalty = _calc_cancel_penalty(env, &depositor, escrow_id, escrow.total_amount);
-    let net_refund = if escrow.total_amount > penalty { escrow.total_amount - penalty } else { 0 };
-
-    // Update escrowed amount tracking
-    let token_key = escrow.token.clone().unwrap_or_else(|| env.current_contract_address());
-    let current_escrowed: i128 = env
-        .storage()
-        .instance()
-        .get(&DataKey::EscrowedAmount(token_key.clone()))
-        .unwrap_or(0);
-    env.storage().instance().set(
-        &DataKey::EscrowedAmount(token_key.clone()),
-        &(current_escrowed - escrow.total_amount),
-    );
-
-    // Penalty accrues to platform fees
-    if penalty > 0 {
-        let current_fees: i128 = env
-            .storage()
-            .instance()
-            .get(&DataKey::TotalFeesByToken(token_key))
-            .unwrap_or(0);
-        env.storage()
-            .instance()
-            .set(&DataKey::TotalFeesByToken(escrow.token.clone().unwrap_or_else(|| env.current_contract_address())), &(current_fees + penalty));
+    if new_total > old_total {
+        grow(env, &mut escrow, &depositor, sub(new_total, old_total)?)?;
+    } else if new_total < old_total {
+        shrink(env, &mut escrow, sub(old_total, new_total)?)?;
     }
 
-    escrow.status = EscrowStatus::Cancelled;
-    escrow_core::save_escrow(env, escrow_id, &escrow);
-
-    if net_refund > 0 {
-        escrow_core::do_transfer(env, &escrow.token, &depositor, net_refund);
+    for i in 0..escrow.milestone_count {
+        core::p_remove(env, &DataKey::Milestone(escrow_id, i));
     }
-
+    save_new_milestones(env, escrow_id, &milestones);
+    escrow.milestone_count = milestones.len();
+    core::save_escrow(env, escrow_id, &escrow);
+    emit_funds_updated(env, escrow_id, &escrow, old_total);
     Ok(())
 }
 
-fn _calc_cancel_penalty(env: &Env, user: &Address, escrow_id: u32, amount: i128) -> i128 {
-    let cancellations: u32 = env
-        .storage()
-        .instance()
-        .get(&DataKey::UserCancellations(user.clone()))
-        .unwrap_or(0);
-    let last_ledger: u32 = env
-        .storage()
-        .instance()
-        .get(&DataKey::LastCancellationLedger(user.clone()))
-        .unwrap_or(0);
-
-    // Decay: 1 cancellation per ~30 days without a new one (17280 ledgers/day * 30)
-    let effective = if last_ledger == 0 || cancellations == 0 {
-        cancellations
-    } else {
-        let elapsed = env.ledger().sequence().saturating_sub(last_ledger);
-        let reduction = elapsed / (17280 * 30);
-        cancellations.saturating_sub(reduction)
-    };
-
-    let base_pct: u32 = if effective <= 2 { 0 }
-        else if effective <= 5 { 5 }
-        else if effective <= 10 { 10 }
-        else { 15 };
-
-    // Count applications for this escrow
-    let mut app_count: u32 = 0;
-    for i in 0..50u32 {
-        if env.storage().instance().has(&DataKey::Application(escrow_id, i)) {
-            app_count += 1;
-        }
-    }
-    let app_pct: u32 = if app_count >= 11 { 15 } else if app_count >= 6 { 10 } else if app_count >= 1 { 5 } else { 0 };
-
-    let total_pct = (base_pct + app_pct).min(30);
-    (amount * total_pct as i128) / 100
-}
-
-// ─── Dynamic fund management (open jobs only) ─────────────────────────────────
-
-/// Add additional funds to a specific milestone on an open job before freelancer
-/// assignment. `additional_amount` is the NET amount added to the milestone;
-/// the proportional platform fee is collected on top.
+/// Put more money on one milestone of a job nobody has started.
 pub fn add_job_funds(
     env: &Env,
     escrow_id: u32,
     depositor: Address,
     additional_amount: i128,
     milestone_index: u32,
-) -> Result<(), Error> {
-    depositor.require_auth();
-    admin::require_not_paused(env)?;
-
+) -> SfResult<()> {
     if additional_amount <= 0 {
-        return Err(Error::from_contract_error(SecureFlowError::InvalidAmount as u32));
+        return Err(SecureFlowError::InvalidAmount);
     }
-
-    escrow_core::require_valid_escrow(env, escrow_id)?;
-    let mut escrow = escrow_core::get_escrow(env, escrow_id)
-        .ok_or_else(|| Error::from_contract_error(SecureFlowError::EscrowNotFound as u32))?;
-
-    if escrow.depositor != depositor {
-        return Err(Error::from_contract_error(SecureFlowError::OnlyDepositor as u32));
+    let mut escrow = load_editable(env, escrow_id, &depositor)?;
+    let mut m = core::load_milestone(env, &escrow, escrow_id, milestone_index)?;
+    if m.status != MilestoneStatus::NotStarted {
+        return Err(SecureFlowError::MilestoneAlreadyProcessed);
     }
-    if !escrow.is_open_job {
-        return Err(Error::from_contract_error(SecureFlowError::CannotCancelAssignedJob as u32));
-    }
-    if escrow.status != EscrowStatus::Pending {
-        return Err(Error::from_contract_error(SecureFlowError::InvalidEscrowStatus as u32));
-    }
-    if milestone_index >= escrow.milestone_count {
-        return Err(Error::from_contract_error(SecureFlowError::MilestoneIndexOutOfBounds as u32));
-    }
-
-    let mut milestone: crate::storage_types::Milestone = env
-        .storage()
-        .instance()
-        .get::<DataKey, crate::storage_types::Milestone>(&DataKey::Milestone(escrow_id, milestone_index))
-        .ok_or_else(|| Error::from_contract_error(SecureFlowError::InvalidMilestone as u32))?;
-
-    if milestone.status != MilestoneStatus::NotStarted {
-        return Err(Error::from_contract_error(SecureFlowError::MilestoneAlreadyProcessed as u32));
-    }
-
-    let additional_fee = escrow_core::calculate_fee(env, additional_amount);
-    let total_deposit = additional_amount + additional_fee;
-
-    // Collect from depositor
-    escrow_core::transfer_in(env, &escrow.token, &depositor, total_deposit);
-
-    // Update state
-    milestone.amount += additional_amount;
-    escrow.total_amount += additional_amount;
-    escrow.platform_fee += additional_fee;
-
-    let token_key = escrow.token.clone().unwrap_or_else(|| env.current_contract_address());
-    let current_escrowed: i128 = env
-        .storage()
-        .instance()
-        .get(&DataKey::EscrowedAmount(token_key.clone()))
-        .unwrap_or(0);
-    env.storage()
-        .instance()
-        .extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
-    env.storage().instance().set(&DataKey::EscrowedAmount(token_key), &(current_escrowed + total_deposit));
-    env.storage().instance().set(&DataKey::Milestone(escrow_id, milestone_index), &milestone);
-    escrow_core::save_escrow(env, escrow_id, &escrow);
+    let old_total = escrow.total_amount;
+    grow(env, &mut escrow, &depositor, additional_amount)?;
+    m.amount = add(m.amount, additional_amount)?;
+    core::save_milestone(env, escrow_id, milestone_index, &m);
+    core::save_escrow(env, escrow_id, &escrow);
+    emit_funds_updated(env, escrow_id, &escrow, old_total);
     Ok(())
 }
 
-/// Withdraw funds from a specific milestone on an open job before freelancer
-/// assignment. `withdraw_amount` is the NET milestone reduction; the
-/// proportional platform fee is refunded alongside it.
+/// Take money back off one unstarted milestone.
+///
+/// Allowed in two situations:
+///   * before the freelancer starts — ordinary budgeting;
+///   * after arbitration — the exit from a job that visibly broke. A ruling
+///     settles one milestone, not the job, and the remaining milestones were
+///     otherwise unreachable until the deadline plus the emergency delay.
+///
+/// Only work nobody has submitted can be taken back, so this never costs the
+/// freelancer anything they earned.
 pub fn withdraw_job_funds(
     env: &Env,
     escrow_id: u32,
     depositor: Address,
     withdraw_amount: i128,
     milestone_index: u32,
-) -> Result<(), Error> {
+) -> SfResult<()> {
     depositor.require_auth();
     admin::require_not_paused(env)?;
-
     if withdraw_amount <= 0 {
-        return Err(Error::from_contract_error(SecureFlowError::InvalidAmount as u32));
+        return Err(SecureFlowError::InvalidAmount);
+    }
+    let mut escrow = core::load_escrow(env, escrow_id)?;
+    core::require_depositor(&escrow, &depositor)?;
+
+    let before_work = !escrow.work_started && escrow.status == EscrowStatus::Pending;
+    let after_arbitration = escrow.status == EscrowStatus::InProgress
+        && core::p_get::<bool>(env, &DataKey::Arbitrated(escrow_id)).unwrap_or(false);
+    if !before_work && !after_arbitration {
+        return Err(SecureFlowError::CannotModifyStartedEscrow);
     }
 
-    escrow_core::require_valid_escrow(env, escrow_id)?;
-    let mut escrow = escrow_core::get_escrow(env, escrow_id)
-        .ok_or_else(|| Error::from_contract_error(SecureFlowError::EscrowNotFound as u32))?;
-
-    if escrow.depositor != depositor {
-        return Err(Error::from_contract_error(SecureFlowError::OnlyDepositor as u32));
+    let mut m = core::load_milestone(env, &escrow, escrow_id, milestone_index)?;
+    if m.status != MilestoneStatus::NotStarted {
+        return Err(SecureFlowError::MilestoneAlreadyProcessed);
     }
-    if !escrow.is_open_job {
-        return Err(Error::from_contract_error(SecureFlowError::CannotCancelAssignedJob as u32));
-    }
-    if escrow.status != EscrowStatus::Pending {
-        return Err(Error::from_contract_error(SecureFlowError::InvalidEscrowStatus as u32));
-    }
-    if milestone_index >= escrow.milestone_count {
-        return Err(Error::from_contract_error(SecureFlowError::MilestoneIndexOutOfBounds as u32));
+    if withdraw_amount > m.amount {
+        return Err(SecureFlowError::InsufficientWithdrawable);
     }
 
-    let mut milestone: crate::storage_types::Milestone = env
-        .storage()
-        .instance()
-        .get::<DataKey, crate::storage_types::Milestone>(&DataKey::Milestone(escrow_id, milestone_index))
-        .ok_or_else(|| Error::from_contract_error(SecureFlowError::InvalidMilestone as u32))?;
-
-    if milestone.status != MilestoneStatus::NotStarted {
-        return Err(Error::from_contract_error(SecureFlowError::MilestoneAlreadyProcessed as u32));
+    let old_total = escrow.total_amount;
+    shrink(env, &mut escrow, withdraw_amount)?;
+    m.amount = sub(m.amount, withdraw_amount)?;
+    core::save_milestone(env, escrow_id, milestone_index, &m);
+    if after_arbitration {
+        // Taking the last unpaid money back off an arbitrated job finishes it.
+        core::finalize_if_complete(env, escrow_id, &mut escrow)?;
     }
-    if withdraw_amount > milestone.amount {
-        return Err(Error::from_contract_error(SecureFlowError::InvalidAmount as u32));
-    }
-
-    let fee_refund = escrow_core::calculate_fee(env, withdraw_amount);
-    let total_refund = withdraw_amount + fee_refund;
-
-    milestone.amount -= withdraw_amount;
-    escrow.total_amount -= withdraw_amount;
-    escrow.platform_fee = escrow.platform_fee.saturating_sub(fee_refund);
-
-    let token_key = escrow.token.clone().unwrap_or_else(|| env.current_contract_address());
-    let current_escrowed: i128 = env
-        .storage()
-        .instance()
-        .get(&DataKey::EscrowedAmount(token_key.clone()))
-        .unwrap_or(0);
-    env.storage()
-        .instance()
-        .extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
-    env.storage().instance().set(&DataKey::EscrowedAmount(token_key), &(current_escrowed - total_refund));
-    env.storage().instance().set(&DataKey::Milestone(escrow_id, milestone_index), &milestone);
-    escrow_core::save_escrow(env, escrow_id, &escrow);
-
-    escrow_core::do_transfer(env, &escrow.token, &depositor, total_refund);
+    core::save_escrow(env, escrow_id, &escrow);
+    emit_funds_updated(env, escrow_id, &escrow, old_total);
     Ok(())
 }
 
+// ─── Cancellation ────────────────────────────────────────────────────────────
+
+/// Penalty for pulling a job people have applied to: 5 % with 1-5
+/// applications, 10 % with 6-10, 15 % with 11 or more.
+///
+/// Only the applicant charge exists, because it is the one with a victim — a
+/// person whose application just became worthless. A job nobody applied to
+/// costs nobody anything, and that includes a client stranded by a named
+/// freelancer who never started: charging them for someone else's silence is
+/// a fee for being let down.
+fn cancellation_penalty(env: &Env, escrow_id: u32, total: i128) -> SfResult<i128> {
+    let applicants: Vec<Address> =
+        core::p_get(env, &DataKey::Applicants(escrow_id)).unwrap_or(Vec::new(env));
+    let pct: i128 = match applicants.len() {
+        0 => return Ok(0),
+        1..=5 => 5,
+        6..=10 => 10,
+        _ => 15,
+    };
+    core::mul_div(total, pct, 100)
+}
+
+/// Cancel a job nobody has started and take the money back: the budget minus
+/// any applicant penalty, plus the whole held platform fee.
+///
+/// `work_started` is the line, not "is this an open job". The old check
+/// (`is_open_job`) meant a job created with its freelancer already named could
+/// never be cancelled at all, locking the client's budget until the deadline
+/// plus the emergency delay on a job nobody had touched.
+///
+/// Only the UNPAID part comes back. A job reopened after arbitration is
+/// Pending again with some milestones already paid, and those stay paid; the
+/// fee share for them is earned.
+pub fn cancel_job(env: &Env, escrow_id: u32, depositor: Address) -> SfResult<()> {
+    let mut escrow = load_editable(env, escrow_id, &depositor)?;
+
+    let unpaid = sub(escrow.total_amount, escrow.paid_amount)?;
+    let penalty = cancellation_penalty(env, escrow_id, unpaid)?;
+    let fee_back = core::fee_share(&escrow, unpaid)?;
+    let fee_earned = sub(escrow.platform_fee, fee_back)?;
+    let refund = add(sub(unpaid, penalty)?, fee_back)?;
+    let held = add(unpaid, escrow.platform_fee)?;
+
+    let count: u32 = core::p_get(env, &DataKey::UserCancellations(depositor.clone())).unwrap_or(0);
+    core::p_set(
+        env,
+        &DataKey::UserCancellations(depositor.clone()),
+        &count.saturating_add(1),
+    );
+    core::p_set(
+        env,
+        &DataKey::LastCancellationLedger(depositor.clone()),
+        &env.ledger().sequence(),
+    );
+
+    escrow.status = EscrowStatus::Cancelled;
+    core::open_jobs_remove(env, escrow_id);
+    escrow.platform_fee = 0;
+    core::save_escrow(env, escrow_id, &escrow);
+    core::liabilities_sub(env, escrow.token.as_ref(), held)?;
+    core::fees_credit(env, escrow.token.as_ref(), add(penalty, fee_earned)?)?;
+    core::pay_out(env, escrow.token.as_ref(), &depositor, refund)?;
+
+    events::EscrowCancelled {
+        escrow_id,
+        beneficiary: escrow.beneficiary.clone(),
+        depositor,
+        refund,
+        penalty,
+    }
+    .publish(env);
+    Ok(())
+}
+
+// ─── Declining & reopening ───────────────────────────────────────────────────
+
+/// The named freelancer hands back a job before starting it.
+///
+/// A directly assigned escrow puts someone's name on a job they never agreed
+/// to; ignoring it left the client's money locked and the client waiting.
+/// Declining leaves the escrow funded, Pending, with no freelancer and not yet
+/// open — the one state that means "declined, waiting on the client", who then
+/// chooses: name someone (`accept_freelancer`, which may re-name the decliner),
+/// open it to everyone (`reopen_job`), or take the money back (`cancel_job`).
+pub fn decline_assignment(env: &Env, escrow_id: u32, beneficiary: Address) -> SfResult<()> {
+    beneficiary.require_auth();
+    admin::require_not_paused(env)?;
+    let mut escrow = core::load_escrow(env, escrow_id)?;
+    core::require_beneficiary(&escrow, &beneficiary)?;
+    if escrow.work_started {
+        return Err(SecureFlowError::WorkAlreadyStarted);
+    }
+    if escrow.status != EscrowStatus::Pending {
+        return Err(SecureFlowError::InvalidEscrowStatus);
+    }
+
+    core::p_set(
+        env,
+        &DataKey::Declined(escrow_id, beneficiary.clone()),
+        &true,
+    );
+    escrow.beneficiary = None;
+    core::save_escrow(env, escrow_id, &escrow);
+    core::remove_user_escrow(env, beneficiary.clone(), escrow_id);
+
+    events::AssignmentDeclined {
+        escrow_id,
+        depositor: escrow.depositor,
+        freelancer: beneficiary,
+    }
+    .publish(env);
+    Ok(())
+}
+
+/// Put the unfinished part of a job back on the board, with its history.
+///
+/// Two ways in, ending in the same state:
+///   * after a decline   — Pending, nobody assigned;
+///   * after arbitration — the client and freelancer are done, but the work
+///     is still worth doing and the client may prefer it finished to refunded.
+///
+/// Nothing is erased: earlier submissions, dispute reasons and rulings stay on
+/// their milestones, so whoever picks it up can see what happened first. Paid
+/// work stays paid; only milestones nobody submitted are back in play.
+pub fn reopen_job(env: &Env, escrow_id: u32, depositor: Address) -> SfResult<()> {
+    depositor.require_auth();
+    admin::require_not_paused(env)?;
+    let mut escrow = core::load_escrow(env, escrow_id)?;
+    core::require_depositor(&escrow, &depositor)?;
+
+    let declined = escrow.status == EscrowStatus::Pending && escrow.beneficiary.is_none();
+    let arbitrated = escrow.status == EscrowStatus::InProgress
+        && core::p_get::<bool>(env, &DataKey::Arbitrated(escrow_id)).unwrap_or(false);
+    if !declined && !arbitrated {
+        return Err(SecureFlowError::CannotReopenJob);
+    }
+
+    let mut unfinished = false;
+    for i in 0..escrow.milestone_count {
+        if let Some(m) = core::get_milestone(env, escrow_id, i) {
+            if m.status == MilestoneStatus::NotStarted && m.amount > 0 {
+                unfinished = true;
+                break;
+            }
+        }
+    }
+    if !unfinished {
+        return Err(SecureFlowError::NothingLeftToFinish);
+    }
+
+    let previous = escrow.beneficiary.clone();
+    if let Some(p) = &previous {
+        core::remove_user_escrow(env, p.clone(), escrow_id);
+    }
+    escrow.beneficiary = None;
+    escrow.is_open_job = true;
+    escrow.work_started = false;
+    escrow.status = EscrowStatus::Pending;
+    core::open_jobs_add(env, escrow_id);
+    core::save_escrow(env, escrow_id, &escrow);
+
+    events::JobReopened {
+        escrow_id,
+        previous_freelancer: previous,
+    }
+    .publish(env);
+    Ok(())
+}
+
+// ─── Job manager (Autopilot) ─────────────────────────────────────────────────
+
+/// Appoint an agent to run this job: hire, approve, reject, escalate. It can
+/// never cancel, extend, move funds, re-appoint, or become the freelancer.
+/// Appointing replaces any previous manager — one job, one manager, so "who
+/// did this" always has exactly one answer.
+pub fn set_job_manager(
+    env: &Env,
+    escrow_id: u32,
+    manager: Address,
+    depositor: Address,
+) -> SfResult<()> {
+    depositor.require_auth();
+    admin::require_not_paused(env)?;
+    let escrow = core::load_escrow(env, escrow_id)?;
+    core::require_depositor(&escrow, &depositor)?;
+    if core::is_terminal(&escrow.status) {
+        return Err(SecureFlowError::InvalidEscrowStatus);
+    }
+    if manager == depositor {
+        return Err(SecureFlowError::ManagerCannotBeDepositor);
+    }
+    if escrow.beneficiary.as_ref() == Some(&manager) {
+        // THE ONE-WAY KEY: a manager that is also the freelancer could
+        // approve its own milestones and drain the escrow to itself.
+        return Err(SecureFlowError::ManagerCannotBeBeneficiary);
+    }
+    if manager == env.current_contract_address() || escrow.arbiters.contains(&manager) {
+        return Err(SecureFlowError::InvalidAddress);
+    }
+    core::p_set(env, &DataKey::JobManager(escrow_id), &manager);
+    events::JobManagerSet { escrow_id, manager }.publish(env);
+    Ok(())
+}
+
+/// Take management back immediately. The client's escape hatch: it never
+/// depends on the manager's cooperation and works even while paused.
+pub fn revoke_job_manager(env: &Env, escrow_id: u32, depositor: Address) -> SfResult<()> {
+    depositor.require_auth();
+    let escrow = core::load_escrow(env, escrow_id)?;
+    core::require_depositor(&escrow, &depositor)?;
+    let manager = core::get_job_manager(env, escrow_id).ok_or(SecureFlowError::NoManagerSet)?;
+    core::p_remove(env, &DataKey::JobManager(escrow_id));
+    events::JobManagerRevoked { escrow_id, manager }.publish(env);
+    Ok(())
+}

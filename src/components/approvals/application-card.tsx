@@ -1,3 +1,4 @@
+import { VerifiedBadge } from "@/components/verification/verified-badge";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -32,6 +33,7 @@ export function ApplicationCard({
               {application.freelancerAddress.slice(0, 6)}...
               {application.freelancerAddress.slice(-4)}
             </span>
+            <VerifiedBadge address={application.freelancerAddress} />
             {application.badge && <BadgeDisplay badge={application.badge} />}
             {(application.averageRating !== undefined ||
               application.ratingCount !== undefined) && (

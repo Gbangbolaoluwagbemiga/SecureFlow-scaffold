@@ -1,80 +1,60 @@
+//! Evidence trail for disputes, stored on-chain.
+
+use crate::escrow_core as core;
+use crate::events;
 use crate::storage_types::{
-    DataKey, EscrowData, EvidenceEntry, SecureFlowError,
-    INSTANCE_BUMP_AMOUNT, INSTANCE_LIFETIME_THRESHOLD,
+    DataKey, EvidenceEntry, SecureFlowError, SfResult, MAX_EVIDENCE_PER_MILESTONE,
 };
-use soroban_sdk::{Address, Env, Error, String, Vec};
+use soroban_sdk::{Address, Env, String, Vec};
 
-fn get_escrow_data(env: &Env, escrow_id: u32) -> Result<EscrowData, Error> {
-    env.storage()
-        .instance()
-        .get::<DataKey, EscrowData>(&DataKey::Escrow(escrow_id))
-        .ok_or_else(|| Error::from_contract_error(SecureFlowError::EscrowNotFound as u32))
-}
-
-/// Submit a piece of evidence for a disputed milestone.
-///
-/// Only the depositor (client), beneficiary (freelancer), or an authorized
-/// arbiter may submit evidence for a given escrow.
-///
-/// `cid` is the IPFS CID (or any string identifier) pointing to the evidence
-/// document. Use `"|"` as a separator if you want to append a short description,
-/// e.g. `"QmXyz|My invoice for phase 1"`.
+/// Attach evidence (an IPFS CID, optionally `CID|description`) to a
+/// milestone. Parties to the escrow and arbiters who could rule on it may
+/// submit.
 pub fn submit_evidence(
     env: &Env,
     escrow_id: u32,
     milestone_index: u32,
     submitter: Address,
     cid: String,
-) -> Result<(), Error> {
+) -> SfResult<()> {
     submitter.require_auth();
-
     if cid.is_empty() {
-        return Err(Error::from_contract_error(SecureFlowError::EvidenceCidEmpty as u32));
+        return Err(SecureFlowError::EvidenceCidEmpty);
     }
-
-    let escrow = get_escrow_data(env, escrow_id)?;
-
-    // Only parties or arbiters may submit evidence
-    let is_depositor = escrow.depositor == submitter;
-    let is_beneficiary = escrow.beneficiary.as_ref().map_or(false, |b| b == &submitter);
-    let is_arbiter = escrow
-        .arbiters
-        .iter()
-        .any(|a| a == submitter);
-
-    if !is_depositor && !is_beneficiary && !is_arbiter {
-        return Err(Error::from_contract_error(SecureFlowError::NotPartyToEscrow as u32));
+    let escrow = core::load_escrow(env, escrow_id)?;
+    if milestone_index >= escrow.milestone_count {
+        return Err(SecureFlowError::InvalidMilestone);
     }
-
-    env.storage()
-        .instance()
-        .extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
+    let is_party = core::is_party(env, &escrow, escrow_id, &submitter);
+    let is_arbiter = escrow.arbiters.contains(&submitter)
+        || (core::is_authorized_arbiter(env, &submitter)
+            && core::panel_allows(env, &escrow, &submitter));
+    if !is_party && !is_arbiter {
+        return Err(SecureFlowError::NotPartyToEscrow);
+    }
 
     let key = DataKey::Evidence(escrow_id, milestone_index);
-    let mut entries: Vec<EvidenceEntry> = env
-        .storage()
-        .instance()
-        .get(&key)
-        .unwrap_or(Vec::new(env));
-
+    let mut entries: Vec<EvidenceEntry> = core::p_get(env, &key).unwrap_or(Vec::new(env));
+    if entries.len() >= MAX_EVIDENCE_PER_MILESTONE {
+        return Err(SecureFlowError::TooManyEvidenceEntries);
+    }
     entries.push_back(EvidenceEntry {
         submitter: submitter.clone(),
         cid: cid.clone(),
         submitted_at: env.ledger().timestamp(),
     });
+    core::p_set(env, &key, &entries);
 
-    env.storage().instance().set(&key, &entries);
-
+    events::EvidenceSubmitted {
+        escrow_id,
+        milestone_index,
+        submitter,
+        cid,
+    }
+    .publish(env);
     Ok(())
 }
 
-/// Return all evidence entries for a given escrow / milestone pair.
 pub fn get_evidence(env: &Env, escrow_id: u32, milestone_index: u32) -> Vec<EvidenceEntry> {
-    env.storage()
-        .instance()
-        .extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
-    env.storage()
-        .instance()
-        .get(&DataKey::Evidence(escrow_id, milestone_index))
-        .unwrap_or(Vec::new(env))
+    core::p_get(env, &DataKey::Evidence(escrow_id, milestone_index)).unwrap_or(Vec::new(env))
 }

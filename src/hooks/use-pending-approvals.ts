@@ -24,30 +24,25 @@ export function usePendingApprovals() {
         return;
       }
 
-      // Use the contract’s user escrows index (fast + accurate)
+      // My open jobs in one batch read, then their application counts in
+      // parallel (previously one sequential read per escrow).
+      const me = wallet.address.toLowerCase().trim();
       const escrowIds = await contractService.getUserEscrows(wallet.address);
-
-      for (const id of escrowIds) {
-        const escrow = await contractService.getEscrow(id);
-        if (!escrow) continue;
-
-        const isMyJob =
-          escrow.creator?.toLowerCase().trim() ===
-          wallet.address.toLowerCase().trim();
-        if (!isMyJob) continue;
-
-        const isOpenJob =
-          !escrow.freelancer ||
-          escrow.freelancer ===
-            "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF" ||
-          escrow.freelancer === "";
-        if (!isOpenJob) continue;
-
-        const applications = await contractService.getApplications(id);
-        if (applications && applications.length > 0) {
-          setHasPendingApprovals(true);
-          return;
-        }
+      const escrows = await contractService.getEscrowsBatch(
+        escrowIds.map(Number),
+      );
+      const myOpenJobs = escrows.filter(
+        (e) =>
+          e.creator.toLowerCase().trim() === me &&
+          !e.freelancer &&
+          e.status === 0,
+      );
+      const counts = await Promise.all(
+        myOpenJobs.map((e) => contractService.getApplicationCount(e.escrow_id)),
+      );
+      if (counts.some((c) => c > 0)) {
+        setHasPendingApprovals(true);
+        return;
       }
 
       setHasPendingApprovals(false);

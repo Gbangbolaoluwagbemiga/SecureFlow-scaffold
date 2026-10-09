@@ -6,22 +6,22 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useFreelancerStatus } from "@/hooks/use-freelancer-status";
 import { useAdminStatus } from "@/hooks/use-admin-status";
 import { useJobCreatorStatus } from "@/hooks/use-job-creator-status";
 import { usePendingApprovals } from "@/hooks/use-pending-approvals";
-import { useWeb3 } from "@/contexts/web3-context";
+import { useFreelancerStatus } from "@/hooks/use-freelancer-status";
 export function Navbar() {
   const location = useLocation();
   const pathname = location.pathname;
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const mobileMenuRef = useRef<HTMLDivElement>(null);
 
-  const { isFreelancer } = useFreelancerStatus();
+  // Shown once the wallet has applied to (or been named on) a job. Re-checked
+  // on navigation so it appears right after a first application.
+  const { isFreelancer } = useFreelancerStatus(pathname);
   const { isAdmin } = useAdminStatus();
   const { isJobCreator } = useJobCreatorStatus();
   const { hasPendingApprovals } = usePendingApprovals();
-  useWeb3();
 
   const isActive = (path: string) => {
     if (path === "/") {
@@ -74,12 +74,16 @@ export function Navbar() {
         <div className="container mx-auto px-4 h-16 flex items-center justify-between gap-2">
           <Link to="/" className="flex items-center gap-2 font-bold text-xl">
             <img
-              src="/secureflow-favicon.svg"
+              src="/secureflow-mark.svg"
               alt="SecureFlow"
-              className="h-7 w-7 shrink-0"
+              className="h-8 w-auto shrink-0"
             />
-            <span className="bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-              SecureFlow
+            {/* Matches the mark: "Secure" steady, "Flow" in the current's gradient. */}
+            <span className="tracking-tight">
+              Secure
+              <span className="bg-gradient-to-r from-[#3B82F6] to-[#22D3EE] bg-clip-text text-transparent">
+                Flow
+              </span>
             </span>
           </Link>
 

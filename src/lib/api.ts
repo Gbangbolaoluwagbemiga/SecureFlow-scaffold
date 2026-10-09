@@ -27,7 +27,10 @@ export function isApiConfigured(): boolean {
   return Boolean(getApiBase());
 }
 
-async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+export async function apiFetch<T>(
+  path: string,
+  init?: RequestInit,
+): Promise<T> {
   const base = getApiBase();
   if (!base) {
     throw new Error("VITE_API_URL is not set (required for production builds)");
@@ -286,4 +289,36 @@ export async function uploadMilestoneFile(
   }
 
   return res.json() as Promise<UploadedFile>;
+}
+
+// ─── Identity verification (Didit) ──────────────────────────────────────────
+
+export type VerificationState =
+  | "pending"
+  | "approved"
+  | "declined"
+  | "in_review"
+  | "duplicate_identity"
+  | "wallet_bound"
+  | "error"
+  | null;
+
+/** Start (or resume) a Didit session for this wallet. */
+export async function startIdentityVerification(wallet: string): Promise<{
+  verified: boolean;
+  url?: string;
+  sessionId?: string;
+}> {
+  return apiFetch("/v1/verification/session", {
+    method: "POST",
+    body: JSON.stringify({ wallet }),
+  });
+}
+
+export async function getIdentityVerificationStatus(
+  wallet: string,
+): Promise<{ verified: boolean; state: VerificationState }> {
+  return apiFetch(
+    `/v1/verification/status?wallet=${encodeURIComponent(wallet)}`,
+  );
 }

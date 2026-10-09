@@ -1,3 +1,4 @@
+import { VerifiedBadge } from "@/components/verification/verified-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +22,8 @@ import {
 import { MilestoneActions } from "@/components/milestone-actions";
 import { MilestoneNegotiation } from "@/components/milestone-negotiation";
 import { JobManagement } from "@/components/job-management";
+import { AutopilotPanel } from "@/components/autopilot/autopilot-panel";
+import { AutopilotBadge } from "@/components/autopilot/autopilot-badge";
 import { EvidenceSubmissionButton } from "@/components/evidence-submission-button";
 import { ViewEvidenceButton } from "@/components/view-evidence-button";
 import { parseAttachment } from "@/lib/utils";
@@ -215,6 +218,10 @@ export function EscrowCard({
               </div>
             </div>
             <div className="flex items-center gap-2">
+              {escrow.isClient && !isOpenJob && (
+                <VerifiedBadge address={escrow.beneficiary} />
+              )}
+              {!isOpenJob && <AutopilotBadge escrowId={escrow.id} />}
               <Badge className={getStatusColor(displayStatus)}>
                 {displayStatus}
               </Badge>
@@ -294,6 +301,19 @@ export function EscrowCard({
 
             {expandedEscrow === escrow.id && (
               <div className="space-y-4 pt-4 border-t">
+                {escrow.isClient && (
+                  <AutopilotPanel
+                    escrowId={Number(escrow.id)}
+                    status={escrow.status}
+                    hasFreelancer={!isOpenJob}
+                    milestones={escrow.milestones.map((m) => ({
+                      description:
+                        (m as any).originalDescription ?? m.description ?? "",
+                      amount: m.amount,
+                      status: m.status,
+                    }))}
+                  />
+                )}
                 <div className="space-y-3">
                   <h4 className="font-medium">Milestones:</h4>
                   {escrow.milestones.map((milestone, idx) => (
@@ -542,10 +562,11 @@ export function EscrowCard({
                   ))}
                 </div>
 
-                {/* Job Management — fund management + cancel (open jobs, client only) */}
+                {/* Job Management — funds, cancel, reopen, job manager (client only) */}
                 <JobManagement
                   escrowId={escrow.id}
-                  isOpenJob={isOpenJob}
+                  status={escrow.status}
+                  hasFreelancer={!isOpenJob}
                   isClient={escrow.isClient || false}
                   totalAmount={escrow.totalAmount}
                   milestones={escrow.milestones.map((m, i) => ({

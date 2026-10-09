@@ -7,14 +7,22 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useWeb3 } from "@/contexts/web3-context";
-import { useState } from "react";
 import { Copy, LogOut, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
+/** Two hues derived from the address → a stable, distinct gradient. */
+function identicon(address: string): string {
+  let h = 0;
+  for (let i = 0; i < address.length; i++) {
+    h = (h * 31 + address.charCodeAt(i)) >>> 0;
+  }
+  const a = h % 360;
+  const b = (a + 40 + ((h >>> 9) % 140)) % 360;
+  return `linear-gradient(135deg, hsl(${a} 75% 55%), hsl(${b} 70% 45%))`;
+}
+
 export function WalletButton() {
   const { wallet, connectWallet, disconnectWallet, refreshBalance } = useWeb3();
-  const [networkIconError, setNetworkIconError] = useState(false);
-  const [walletIconError, setWalletIconError] = useState(false);
   const { toast } = useToast();
 
   const handleConnect = () => {
@@ -58,63 +66,49 @@ export function WalletButton() {
     );
   }
 
+  const balanceNumber = Number(wallet.balance || 0);
+  const balanceFull = balanceNumber.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  // 5382.15 → "5.38K"; small balances keep two decimals.
+  const balanceShort =
+    balanceNumber >= 1000
+      ? new Intl.NumberFormat(undefined, {
+          notation: "compact",
+          maximumFractionDigits: 2,
+        }).format(balanceNumber)
+      : balanceNumber.toFixed(2);
+  const short = `${wallet.address.slice(0, 6)}…${wallet.address.slice(-4)}`;
+
   return (
     <DropdownMenu>
+      {/*
+        Compact trigger, as in the Arc version: identicon + balance (~110px).
+        The identicon IS the address (derived from it, so it changes the
+        instant you switch accounts) and the balance is what people glance up
+        for. The XLM icon, separator and truncated address made the pill
+        ~300px and pushed the nav off-centre; the address lives in the
+        tooltip, the accessible name and the menu below.
+      */}
       <DropdownMenuTrigger asChild>
         <Button
           variant="secondary"
-          className="font-mono flex items-center gap-2 px-3 md:px-4 py-2 bg-muted/50 hover:bg-muted/70 border border-border/40 max-w-[160px] md:max-w-none"
+          title={wallet.address}
+          aria-label={`Wallet ${short}, ${balanceFull} XLM`}
+          className="flex items-center gap-2 h-9 rounded-full px-2 sm:pl-1.5 sm:pr-3 bg-muted/50 hover:bg-muted/70 border border-border/40"
         >
-          {/* Desktop/tablet: show network + balance + avatar */}
-          <div className="hidden md:flex items-center gap-2">
-            {/* XLM (Stellar Lumens) icon */}
-            <div className="w-4 h-4 rounded-full overflow-hidden flex items-center justify-center">
-              {!networkIconError ? (
-                <img
-                  src="/xlm-icon.svg"
-                  alt="XLM"
-                  className="w-full h-full object-contain"
-                  onError={() => setNetworkIconError(true)}
-                />
-              ) : (
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 16 16"
-                  fill="none"
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="w-full h-full"
-                >
-                  <circle cx="8" cy="8" r="8" fill="#7D00FF" />
-                  <path
-                    d="M8 2L9.5 6.5L14 8L9.5 9.5L8 14L6.5 9.5L2 8L6.5 6.5L8 2Z"
-                    fill="white"
-                  />
-                </svg>
-              )}
-            </div>
-
-            <span>{Number(wallet.balance || 0).toFixed(2)} XLM</span>
-            <span className="text-muted-foreground">·</span>
-
-            {/* Dynamic wallet avatar */}
-            <div className="w-4 h-4 rounded-full overflow-hidden">
-              {!walletIconError ? (
-                <img
-                  src={`https://effigy.im/a/${wallet.address}.svg`}
-                  alt="Wallet"
-                  className="w-full h-full object-cover"
-                  onError={() => setWalletIconError(true)}
-                />
-              ) : (
-                <div className="w-full h-full bg-linear-to-br from-blue-400 to-blue-600 rounded-full"></div>
-              )}
-            </div>
-          </div>
-
-          {/* Always show just the address on mobile; also show on desktop after icons */}
-          <span className="truncate md:ml-1" title={wallet.address}>
-            {wallet.address.slice(0, 6)}…{wallet.address.slice(-4)}
+          {/* Identicon generated locally from the address: no third-party
+              image request (which also leaked the address), and it always
+              renders. Changes the instant you switch accounts. */}
+          <span
+            aria-hidden="true"
+            className="w-6 h-6 rounded-full shrink-0 ring-1 ring-border/60"
+            style={{ background: identicon(wallet.address) }}
+          />
+          <span className="hidden sm:inline text-sm font-medium tabular-nums">
+            {balanceShort}{" "}
+            <span className="text-muted-foreground font-normal">XLM</span>
           </span>
         </Button>
       </DropdownMenuTrigger>
@@ -125,7 +119,7 @@ export function WalletButton() {
             {wallet.address}
           </div>
           <div className="text-xs text-muted-foreground mt-1">
-            Balance: {Number(wallet.balance || 0).toFixed(2)} XLM
+            Balance: {balanceFull} XLM
           </div>
         </div>
         <DropdownMenuSeparator />

@@ -1,386 +1,315 @@
+//! Deadlines, stalled jobs, and getting money back out of them.
+
 use crate::admin;
-use crate::escrow_core;
-use crate::storage_types::{DataKey, EscrowStatus, OverdueRequest, SecureFlowError, INSTANCE_BUMP_AMOUNT, INSTANCE_LIFETIME_THRESHOLD};
-use soroban_sdk::{token, Address, Env, Error, String};
+use crate::escrow_core::{self as core, add, add_u32, sub};
+use crate::events;
+use crate::storage_types::{
+    DataKey, EscrowStatus, MilestoneStatus, OverdueRequest, SecureFlowError, SfResult,
+    EMERGENCY_REFUND_DELAY_LEDGERS, MAX_EXTENSION_SECONDS, OVERDUE_RESOLUTION_INDEX,
+};
+use crate::work_lifecycle;
+use soroban_sdk::{symbol_short, Address, Env, String};
 
-const EMERGENCY_REFUND_DELAY: u32 = 2592000; // 30 days in seconds (legacy)
-
-pub fn refund_escrow(env: &Env, escrow_id: u32, depositor: Address) -> Result<(), Error> {
+/// The client takes back everything still unpaid, once the deadline is 30
+/// days behind them and nobody has a claim waiting.
+///
+/// The escape hatch for a job that STALLED, not a way to win an argument by
+/// waiting: an open dispute, or delivered work nobody has reviewed, blocks it.
+/// Otherwise a client could refuse to approve delivered work, sit out the
+/// arbiter's deliberation, and reclaim the milestone the freelancer had
+/// already delivered.
+///
+/// Deliberately not blocked by the emergency pause — it is the path that
+/// returns money to its owner.
+pub fn emergency_refund_after_deadline(
+    env: &Env,
+    escrow_id: u32,
+    depositor: Address,
+) -> SfResult<()> {
     depositor.require_auth();
-    admin::require_not_paused(env)?;
+    let mut escrow = core::load_escrow(env, escrow_id)?;
+    core::require_depositor(&escrow, &depositor)?;
 
-    escrow_core::require_valid_escrow(env, escrow_id)?;
-    let mut escrow = escrow_core::get_escrow(env, escrow_id)
-        .ok_or_else(|| Error::from_contract_error(SecureFlowError::EscrowNotFound as u32))?;
-
-    if escrow.depositor != depositor {
-        return Err(Error::from_contract_error(SecureFlowError::OnlyDepositor as u32));
+    // The old check compared a ledger number against deadline + 2,592,000
+    // SECONDS treated as ledgers — about 150 days, not 30.
+    let unlock = add_u32(escrow.deadline, EMERGENCY_REFUND_DELAY_LEDGERS)?;
+    if env.ledger().sequence() <= unlock {
+        return Err(SecureFlowError::EmergencyPeriodNotReached);
+    }
+    if core::is_terminal(&escrow.status) {
+        return Err(SecureFlowError::CannotRefund);
+    }
+    if escrow.status == EscrowStatus::Disputed {
+        return Err(SecureFlowError::RefundBlockedByDispute);
+    }
+    for i in 0..escrow.milestone_count {
+        if let Some(m) = core::get_milestone(env, escrow_id, i) {
+            if m.status == MilestoneStatus::Submitted {
+                return Err(SecureFlowError::RefundBlockedBySubmittedWork);
+            }
+        }
     }
 
-    if escrow.status != EscrowStatus::Pending {
-        return Err(Error::from_contract_error(SecureFlowError::InvalidEscrowStatus as u32));
+    let unpaid = sub(escrow.total_amount, escrow.paid_amount)?;
+    if unpaid <= 0 {
+        return Err(SecureFlowError::NothingToRefund);
     }
-
-    if escrow.work_started {
-        return Err(Error::from_contract_error(SecureFlowError::WorkAlreadyStarted as u32));
-    }
-
-    let current_ledger = env.ledger().sequence();
-    if current_ledger >= escrow.deadline {
-        return Err(Error::from_contract_error(SecureFlowError::DeadlineNotPassed as u32));
-    }
-
-    let refund_amount = escrow.total_amount - escrow.paid_amount;
-    if refund_amount <= 0 {
-        return Err(Error::from_contract_error(SecureFlowError::NothingToRefund as u32));
-    }
-
-    escrow.status = EscrowStatus::Refunded;
-
-    // Update escrowed amount
-    let token_key = escrow.token.clone().unwrap_or_else(|| env.current_contract_address());
-    let current_escrowed: i128 = env
-        .storage()
-        .instance()
-        .get(&DataKey::EscrowedAmount(token_key.clone()))
-        .unwrap_or(0);
-    env.storage()
-        .instance()
-        .extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
-    env.storage()
-        .instance()
-        .set(
-            &DataKey::EscrowedAmount(token_key),
-            &(current_escrowed - refund_amount),
-        );
-
-    // Transfer refund
-    if let Some(token_addr) = escrow.token.clone() {
-        let token_client = token::Client::new(env, &token_addr);
-        token_client.transfer(&env.current_contract_address(), &depositor, &refund_amount);
-    } else {
-        // Transfer native XLM refund using Stellar Asset Contract (SAC)
-        let native_token_str = String::from_str(env, "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC");
-        let native_token_address = Address::from_string(&native_token_str);
-        let native_token_client = token::Client::new(env, &native_token_address);
-        native_token_client.transfer(
-            &env.current_contract_address(),
-            &depositor,
-            &refund_amount,
-        );
-    }
-
-    escrow_core::save_escrow(env, escrow_id, &escrow);
-    Ok(())
-}
-
-pub fn emergency_refund_after_deadline(env: &Env, escrow_id: u32, depositor: Address) -> Result<(), Error> {
-    depositor.require_auth();
-    admin::require_not_paused(env)?;
-
-    escrow_core::require_valid_escrow(env, escrow_id)?;
-    let mut escrow = escrow_core::get_escrow(env, escrow_id)
-        .ok_or_else(|| Error::from_contract_error(SecureFlowError::EscrowNotFound as u32))?;
-
-    if escrow.depositor != depositor {
-        return Err(Error::from_contract_error(SecureFlowError::OnlyDepositor as u32));
-    }
-
-    let current_ledger = env.ledger().sequence();
-    if current_ledger <= escrow.deadline + EMERGENCY_REFUND_DELAY {
-        return Err(Error::from_contract_error(SecureFlowError::EmergencyPeriodNotReached as u32));
-    }
-
-    if escrow.status == EscrowStatus::Released || escrow.status == EscrowStatus::Refunded {
-        return Err(Error::from_contract_error(SecureFlowError::CannotRefund as u32));
-    }
-
-    let refund_amount = escrow.total_amount - escrow.paid_amount;
-    if refund_amount <= 0 {
-        return Err(Error::from_contract_error(SecureFlowError::NothingToRefund as u32));
-    }
+    // The platform keeps the fee share for work actually paid out, and gives
+    // the rest back with the principal.
+    let fee_back = core::fee_share(&escrow, unpaid)?;
+    let fee_earned = sub(escrow.platform_fee, fee_back)?;
+    let refund = add(unpaid, fee_back)?;
 
     escrow.status = EscrowStatus::Expired;
+    escrow.platform_fee = 0;
+    core::save_escrow(env, escrow_id, &escrow);
+    core::liabilities_sub(env, escrow.token.as_ref(), add(refund, fee_earned)?)?;
+    core::fees_credit(env, escrow.token.as_ref(), fee_earned)?;
+    // The old version moved NOTHING for native-XLM escrows here (an empty
+    // `else` branch) while still marking them refunded: the client's XLM
+    // stayed in the contract for good.
+    core::pay_out(env, escrow.token.as_ref(), &depositor, refund)?;
 
-    // Update escrowed amount
-    let token_key = escrow.token.clone().unwrap_or_else(|| env.current_contract_address());
-    let current_escrowed: i128 = env
-        .storage()
-        .instance()
-        .get(&DataKey::EscrowedAmount(token_key.clone()))
-        .unwrap_or(0);
-    env.storage()
-        .instance()
-        .extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
-    env.storage()
-        .instance()
-        .set(
-            &DataKey::EscrowedAmount(token_key),
-            &(current_escrowed - refund_amount),
-        );
-
-    // Transfer refund
-    if let Some(token_addr) = escrow.token.clone() {
-        let token_client = token::Client::new(env, &token_addr);
-        token_client.transfer(&env.current_contract_address(), &depositor, &refund_amount);
-    } else {
-        // Native XLM refund
+    events::EscrowRefunded {
+        escrow_id,
+        depositor,
+        beneficiary: escrow.beneficiary,
+        amount: refund,
+        kind: symbol_short!("emergency"),
     }
-
-    escrow_core::save_escrow(env, escrow_id, &escrow);
+    .publish(env);
     Ok(())
 }
 
-pub fn extend_deadline(env: &Env, escrow_id: u32, depositor: Address, extra_seconds: u32) -> Result<(), Error> {
+/// Push the deadline back by `extra_seconds` (1 second to 365 days).
+pub fn extend_deadline(
+    env: &Env,
+    escrow_id: u32,
+    depositor: Address,
+    extra_seconds: u32,
+) -> SfResult<()> {
     depositor.require_auth();
-
-    if extra_seconds == 0 || extra_seconds > 2592000 {
-        // Max 30 days
-        return Err(Error::from_contract_error(SecureFlowError::InvalidExtension as u32));
+    admin::require_not_paused(env)?;
+    if extra_seconds == 0 || extra_seconds > MAX_EXTENSION_SECONDS {
+        return Err(SecureFlowError::InvalidExtension);
     }
-
-    escrow_core::require_valid_escrow(env, escrow_id)?;
-    let mut escrow = escrow_core::get_escrow(env, escrow_id)
-        .ok_or_else(|| Error::from_contract_error(SecureFlowError::EscrowNotFound as u32))?;
-
-    if escrow.depositor != depositor {
-        return Err(Error::from_contract_error(SecureFlowError::OnlyDepositor as u32));
-    }
-
+    let mut escrow = core::load_escrow(env, escrow_id)?;
+    core::require_depositor(&escrow, &depositor)?;
     if escrow.status != EscrowStatus::InProgress && escrow.status != EscrowStatus::Pending {
-        return Err(Error::from_contract_error(SecureFlowError::CannotExtend as u32));
+        return Err(SecureFlowError::CannotExtend);
     }
-
-    escrow.deadline += extra_seconds as u32;
-    escrow_core::save_escrow(env, escrow_id, &escrow);
+    let old_deadline = escrow.deadline;
+    // Seconds converted to ledgers; the old code added raw seconds to a
+    // ledger number, extending five times further than asked.
+    escrow.deadline = add_u32(old_deadline, core::seconds_to_ledgers(extra_seconds))?;
+    core::save_escrow(env, escrow_id, &escrow);
+    events::DeadlineExtended {
+        escrow_id,
+        beneficiary: escrow.beneficiary,
+        old_deadline,
+        new_deadline: escrow.deadline,
+    }
+    .publish(env);
     Ok(())
 }
 
-/// Raise an overdue dispute — callable by either the depositor or the beneficiary
-/// once the project deadline has passed.
-///
-/// This flags the escrow for arbiter review. Neither party can directly pull
-/// funds; resolution comes from `arbiter_approve_refund` or `arbiter_award_freelancer`.
+/// Either side flags a job that ran past its deadline for an arbiter.
 pub fn raise_overdue_dispute(
     env: &Env,
     escrow_id: u32,
     requester: Address,
     reason: String,
-) -> Result<(), Error> {
+) -> SfResult<()> {
     requester.require_auth();
-
-    escrow_core::require_valid_escrow(env, escrow_id)?;
-    let mut escrow = escrow_core::get_escrow(env, escrow_id)
-        .ok_or_else(|| Error::from_contract_error(SecureFlowError::EscrowNotFound as u32))?;
-
-    // Only the depositor or current beneficiary can raise this
-    let is_depositor = escrow.depositor == requester;
-    let is_beneficiary = escrow.beneficiary == Some(requester.clone());
-    if !is_depositor && !is_beneficiary {
-        return Err(Error::from_contract_error(SecureFlowError::Unauthorized as u32));
+    admin::require_not_paused(env)?;
+    let mut escrow = core::load_escrow(env, escrow_id)?;
+    let beneficiary = escrow
+        .beneficiary
+        .clone()
+        .ok_or(SecureFlowError::NoBeneficiary)?;
+    let is_depositor = requester == escrow.depositor;
+    if !is_depositor && requester != beneficiary {
+        return Err(SecureFlowError::OnlyParticipant);
+    }
+    if env.ledger().sequence() <= escrow.deadline {
+        return Err(SecureFlowError::DeadlineNotPassed);
+    }
+    match escrow.status {
+        EscrowStatus::InProgress => {}
+        EscrowStatus::Disputed => return Err(SecureFlowError::EscrowAlreadyDisputed),
+        // Before work starts the client can simply cancel.
+        EscrowStatus::Pending => return Err(SecureFlowError::WorkNotStarted),
+        _ => return Err(SecureFlowError::CannotRefund),
     }
 
-    // Must be past the deadline
-    let current_ledger = env.ledger().sequence();
-    if current_ledger <= escrow.deadline {
-        return Err(Error::from_contract_error(SecureFlowError::DeadlineNotPassed as u32));
-    }
-
-    // Cannot re-open an already resolved escrow
-    if escrow.status == EscrowStatus::Released
-        || escrow.status == EscrowStatus::Refunded
-        || escrow.status == EscrowStatus::Expired
-    {
-        return Err(Error::from_contract_error(SecureFlowError::CannotRefund as u32));
-    }
-
-    // Mark escrow as disputed and record the request
     escrow.status = EscrowStatus::Disputed;
-    escrow_core::save_escrow(env, escrow_id, &escrow);
-
-    env.storage()
-        .instance()
-        .extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
-    env.storage().instance().set(
+    core::save_escrow(env, escrow_id, &escrow);
+    core::p_remove(
+        env,
+        &crate::storage_types::DataKey::DisputeVoters(escrow_id),
+    );
+    core::p_set(
+        env,
         &DataKey::OverdueRequest(escrow_id),
         &OverdueRequest {
-            requester,
-            reason,
-            requested_at: current_ledger,
+            requester: requester.clone(),
+            reason: reason.clone(),
+            requested_at: env.ledger().sequence(),
         },
     );
 
+    let counterparty = if is_depositor {
+        beneficiary
+    } else {
+        escrow.depositor
+    };
+    events::OverdueDisputeRaised {
+        escrow_id,
+        counterparty,
+        requester,
+        reason,
+    }
+    .publish(env);
     Ok(())
 }
 
-/// Arbiter decision: refund all unreleased funds to the depositor (client).
-///
-/// Requires the caller to be a globally authorized arbiter.
-pub fn arbiter_approve_refund(env: &Env, escrow_id: u32, arbiter: Address) -> Result<(), Error> {
+/// An arbiter votes to settle a whole overdue escrow at once: `freelancer_amount`
+/// of the unpaid balance to the freelancer, the rest back to the client.
+/// Executes once `quorum` arbiters agree on the same split.
+fn overdue_resolution(
+    env: &Env,
+    escrow_id: u32,
+    arbiter: Address,
+    freelancer_amount: i128,
+) -> SfResult<()> {
     arbiter.require_auth();
-
-    // Confirm caller is an authorized arbiter
-    if !escrow_core::is_authorized_arbiter(env, arbiter.clone()) {
-        return Err(Error::from_contract_error(SecureFlowError::Unauthorized as u32));
+    if !core::p_has(env, &DataKey::OverdueRequest(escrow_id)) {
+        return Err(SecureFlowError::NoOverdueRequest);
     }
-
-    // Ensure an overdue request exists
-    if env
-        .storage()
-        .instance()
-        .get::<DataKey, OverdueRequest>(&DataKey::OverdueRequest(escrow_id))
-        .is_none()
-    {
-        return Err(Error::from_contract_error(SecureFlowError::NoOverdueRequest as u32));
+    let mut escrow = core::load_escrow(env, escrow_id)?;
+    if escrow.status != EscrowStatus::Disputed {
+        return Err(SecureFlowError::InvalidEscrowStatus);
     }
-
-    escrow_core::require_valid_escrow(env, escrow_id)?;
-    let mut escrow = escrow_core::get_escrow(env, escrow_id)
-        .ok_or_else(|| Error::from_contract_error(SecureFlowError::EscrowNotFound as u32))?;
-
-    if escrow.status == EscrowStatus::Released || escrow.status == EscrowStatus::Refunded {
-        return Err(Error::from_contract_error(SecureFlowError::CannotRefund as u32));
-    }
-
-    let refund_amount = escrow.total_amount - escrow.paid_amount;
-    if refund_amount <= 0 {
-        return Err(Error::from_contract_error(SecureFlowError::NothingToRefund as u32));
-    }
-
-    escrow.status = EscrowStatus::Refunded;
-
-    let token_key = escrow
-        .token
+    core::require_arbiter_for(env, &escrow, escrow_id, &arbiter)?;
+    let beneficiary = escrow
+        .beneficiary
         .clone()
-        .unwrap_or_else(|| env.current_contract_address());
-    let current_escrowed: i128 = env
-        .storage()
-        .instance()
-        .get(&DataKey::EscrowedAmount(token_key.clone()))
-        .unwrap_or(0);
-    env.storage()
-        .instance()
-        .extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
-    env.storage().instance().set(
-        &DataKey::EscrowedAmount(token_key),
-        &(current_escrowed - refund_amount),
+        .ok_or(SecureFlowError::NoBeneficiary)?;
+
+    let available = sub(escrow.total_amount, escrow.paid_amount)?;
+    if freelancer_amount < 0 || freelancer_amount > available {
+        return Err(SecureFlowError::InvalidAmount);
+    }
+    let client_amount = sub(available, freelancer_amount)?;
+
+    let votes = work_lifecycle::cast_vote(
+        env,
+        escrow_id,
+        OVERDUE_RESOLUTION_INDEX,
+        freelancer_amount,
+        client_amount,
+        &arbiter,
     );
+    let required = core::quorum(env, &escrow);
+    events::DisputeVoteCast {
+        escrow_id,
+        milestone_index: OVERDUE_RESOLUTION_INDEX,
+        arbiter: arbiter.clone(),
+        freelancer_amount,
+        client_amount,
+        votes,
+        required,
+    }
+    .publish(env);
+    if votes < required {
+        return Ok(());
+    }
 
-    let depositor = escrow.depositor.clone();
-    do_transfer(env, escrow.token.clone(), &env.current_contract_address(), &depositor, refund_amount);
+    // ── Execute ──
+    // Mark every unsettled milestone so the UI does not show work as still
+    // pending on a closed job.
+    let now = env.ledger().sequence();
+    for i in 0..escrow.milestone_count {
+        if let Some(mut m) = core::get_milestone(env, escrow_id, i) {
+            if m.status != MilestoneStatus::Approved && m.status != MilestoneStatus::Resolved {
+                m.status = MilestoneStatus::Resolved;
+                m.resolved_at = now;
+                m.resolved_by = Some(arbiter.clone());
+                core::save_milestone(env, escrow_id, i, &m);
+            }
+        }
+    }
 
-    // Remove the request record
-    env.storage()
-        .instance()
-        .remove(&DataKey::OverdueRequest(escrow_id));
+    let fee_back = core::fee_share(&escrow, client_amount)?;
+    escrow.paid_amount = add(escrow.paid_amount, freelancer_amount)?;
+    escrow.total_amount = sub(escrow.total_amount, client_amount)?;
+    escrow.platform_fee = sub(escrow.platform_fee, fee_back)?;
+    core::liabilities_sub(env, escrow.token.as_ref(), add(available, fee_back)?)?;
+    core::pay_out(env, escrow.token.as_ref(), &beneficiary, freelancer_amount)?;
+    core::pay_out(
+        env,
+        escrow.token.as_ref(),
+        &escrow.depositor,
+        add(client_amount, fee_back)?,
+    )?;
+    work_lifecycle::close_vote(
+        env,
+        escrow_id,
+        OVERDUE_RESOLUTION_INDEX,
+        freelancer_amount,
+        client_amount,
+    );
+    core::p_remove(env, &DataKey::OverdueRequest(escrow_id));
 
-    escrow_core::save_escrow(env, escrow_id, &escrow);
+    events::OverdueResolved {
+        escrow_id,
+        beneficiary,
+        depositor: escrow.depositor.clone(),
+        freelancer_amount,
+        client_amount,
+        resolved_by: arbiter,
+    }
+    .publish(env);
+
+    if freelancer_amount == 0 {
+        // A full refund ruling. Whatever fee is left belongs to milestones
+        // that were genuinely paid earlier, so the platform keeps it.
+        let fee = escrow.platform_fee;
+        escrow.platform_fee = 0;
+        escrow.status = EscrowStatus::Refunded;
+        core::liabilities_sub(env, escrow.token.as_ref(), fee)?;
+        core::fees_credit(env, escrow.token.as_ref(), fee)?;
+        events::EscrowRefunded {
+            escrow_id,
+            depositor: escrow.depositor.clone(),
+            beneficiary: escrow.beneficiary.clone(),
+            amount: add(client_amount, fee_back)?,
+            kind: symbol_short!("arbiter"),
+        }
+        .publish(env);
+    } else {
+        core::finalize_if_complete(env, escrow_id, &mut escrow)?;
+    }
+    core::save_escrow(env, escrow_id, &escrow);
     Ok(())
 }
 
-/// Arbiter decision: award `freelancer_amount` to the beneficiary (freelancer)
-/// and return the remainder to the depositor (client).
-///
-/// `freelancer_amount` must be ≤ the unreleased balance. Pass the full
-/// unreleased balance to award everything to the freelancer.
+/// Arbiter: return all unpaid funds to the client.
+pub fn arbiter_approve_refund(env: &Env, escrow_id: u32, arbiter: Address) -> SfResult<()> {
+    overdue_resolution(env, escrow_id, arbiter, 0)
+}
+
+/// Arbiter: award `freelancer_amount` of the unpaid balance to the
+/// freelancer and return the rest to the client.
 pub fn arbiter_award_freelancer(
     env: &Env,
     escrow_id: u32,
     arbiter: Address,
     freelancer_amount: i128,
-) -> Result<(), Error> {
-    arbiter.require_auth();
-
-    if !escrow_core::is_authorized_arbiter(env, arbiter.clone()) {
-        return Err(Error::from_contract_error(SecureFlowError::Unauthorized as u32));
-    }
-
-    if env
-        .storage()
-        .instance()
-        .get::<DataKey, OverdueRequest>(&DataKey::OverdueRequest(escrow_id))
-        .is_none()
-    {
-        return Err(Error::from_contract_error(SecureFlowError::NoOverdueRequest as u32));
-    }
-
-    escrow_core::require_valid_escrow(env, escrow_id)?;
-    let mut escrow = escrow_core::get_escrow(env, escrow_id)
-        .ok_or_else(|| Error::from_contract_error(SecureFlowError::EscrowNotFound as u32))?;
-
-    if escrow.status == EscrowStatus::Released || escrow.status == EscrowStatus::Refunded {
-        return Err(Error::from_contract_error(SecureFlowError::CannotRefund as u32));
-    }
-
-    let available = escrow.total_amount - escrow.paid_amount;
-    if freelancer_amount < 0 || freelancer_amount > available {
-        return Err(Error::from_contract_error(SecureFlowError::InvalidAmount as u32));
-    }
-
-    let beneficiary = escrow
-        .beneficiary
-        .clone()
-        .ok_or_else(|| Error::from_contract_error(SecureFlowError::InvalidAddress as u32))?;
-
-    escrow.status = EscrowStatus::Released;
-    escrow.paid_amount += freelancer_amount;
-
-    let token_key = escrow
-        .token
-        .clone()
-        .unwrap_or_else(|| env.current_contract_address());
-    let current_escrowed: i128 = env
-        .storage()
-        .instance()
-        .get(&DataKey::EscrowedAmount(token_key.clone()))
-        .unwrap_or(0);
-    env.storage()
-        .instance()
-        .extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
-    env.storage()
-        .instance()
-        .set(&DataKey::EscrowedAmount(token_key), &(current_escrowed - available));
-
-    // Pay freelancer their portion
-    if freelancer_amount > 0 {
-        do_transfer(env, escrow.token.clone(), &env.current_contract_address(), &beneficiary, freelancer_amount);
-    }
-
-    // Return remainder to depositor
-    let client_amount = available - freelancer_amount;
-    if client_amount > 0 {
-        let depositor = escrow.depositor.clone();
-        do_transfer(env, escrow.token.clone(), &env.current_contract_address(), &depositor, client_amount);
-    }
-
-    env.storage()
-        .instance()
-        .remove(&DataKey::OverdueRequest(escrow_id));
-
-    escrow_core::save_escrow(env, escrow_id, &escrow);
-    Ok(())
+) -> SfResult<()> {
+    overdue_resolution(env, escrow_id, arbiter, freelancer_amount)
 }
 
-/// Get the overdue request for an escrow, if one exists.
 pub fn get_overdue_request(env: &Env, escrow_id: u32) -> Option<OverdueRequest> {
-    env.storage()
-        .instance()
-        .extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT);
-    env.storage()
-        .instance()
-        .get(&DataKey::OverdueRequest(escrow_id))
+    core::p_get(env, &DataKey::OverdueRequest(escrow_id))
 }
-
-/// Internal helper: transfer tokens or native XLM.
-fn do_transfer(env: &Env, token: Option<Address>, from: &Address, to: &Address, amount: i128) {
-    if let Some(token_addr) = token {
-        let token_client = token::Client::new(env, &token_addr);
-        token_client.transfer(from, to, &amount);
-    } else {
-        let native_str = String::from_str(env, "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC");
-        let native_addr = Address::from_string(&native_str);
-        let native_client = token::Client::new(env, &native_addr);
-        native_client.transfer(from, to, &amount);
-    }
-}
-

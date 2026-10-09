@@ -44,8 +44,8 @@ export interface IndexedEvent {
 
 const EVENTS_STORAGE_KEY = "secureflow_indexed_events";
 const CURSOR_STORAGE_KEY = "secureflow_event_cursor";
-/** How many ledgers to look back on first run (~25 minutes of Stellar history) */
-const INITIAL_LOOKBACK = 1000;
+/** How many ledgers to look back on first run (~1 day, matching the poller's catch-up window) */
+const INITIAL_LOOKBACK = 17_280;
 /** Max events to keep in localStorage (oldest get pruned) */
 const MAX_STORED_EVENTS = 1000;
 
@@ -65,6 +65,19 @@ export const EVENT_TYPES = {
   FREELANCER_ACCEPTED: "freelancer_accepted",
   ESCROW_COMPLETED: "escrow_completed",
   ESCROW_REFUNDED: "escrow_refunded",
+  ESCROW_CANCELLED: "escrow_cancelled",
+  ASSIGNMENT_DECLINED: "assignment_declined",
+  JOB_REOPENED: "job_reopened",
+  DEADLINE_EXTENDED: "deadline_extended",
+  OVERDUE_DISPUTE_RAISED: "overdue_dispute_raised",
+  OVERDUE_RESOLVED: "overdue_resolved",
+  MILESTONE_PROPOSAL_SUBMITTED: "milestone_proposal_submitted",
+  MILESTONE_PROPOSAL_APPROVED: "milestone_proposal_approved",
+  MILESTONE_PROPOSAL_REJECTED: "milestone_proposal_rejected",
+  JOB_MANAGER_SET: "job_manager_set",
+  JOB_MANAGER_REVOKED: "job_manager_revoked",
+  JOB_FUNDS_UPDATED: "job_funds_updated",
+  RATING_SUBMITTED: "rating_submitted",
 } as const;
 
 export type EventType = (typeof EVENT_TYPES)[keyof typeof EVENT_TYPES];
@@ -103,12 +116,30 @@ function normaliseEventType(raw: string): string {
 
 // ─── ScVal decoder ─────────────────────────────────────────────────────────────
 
+/**
+ * BigInt → string at EVERY depth, so events survive JSON serialisation.
+ *
+ * Contract events carry i128 amounts inside their data maps (e.g.
+ * `escrow_created.total_amount`). Converting only a top-level BigInt left the
+ * nested ones in place, JSON.stringify threw while storing them, and because
+ * that happened before the cursor advanced, every poll retried the same page
+ * and failed: the indexer — and every on-chain notification — stalled for
+ * good at the first event with an amount in it.
+ */
+function toJsonSafe(value: unknown): unknown {
+  if (typeof value === "bigint") return value.toString();
+  if (Array.isArray(value)) return value.map(toJsonSafe);
+  if (value && typeof value === "object" && value.constructor === Object) {
+    return Object.fromEntries(
+      Object.entries(value).map(([k, v]) => [k, toJsonSafe(v)]),
+    );
+  }
+  return value;
+}
+
 function decodeScVal(val: xdr.ScVal): unknown {
   try {
-    const native = scValToNative(val);
-    // BigInt → string so it survives JSON serialisation
-    if (typeof native === "bigint") return native.toString();
-    return native;
+    return toJsonSafe(scValToNative(val));
   } catch {
     return null;
   }

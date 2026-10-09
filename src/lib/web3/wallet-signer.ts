@@ -99,3 +99,40 @@ export const signAuthEntries = async (
 
   return signedAuthEntries;
 };
+
+/**
+ * Sign a plain-text message (SEP-53) with the connected wallet. Returns the
+ * signature as base64, whatever shape the wallet hands it back in.
+ */
+export const signMessage = async (
+  message: string,
+  address: string,
+): Promise<string> => {
+  const network = getCurrentNetwork();
+  const walletId = storage.getItem("walletId");
+  if (!walletId) throw new Error("Wallet not connected");
+  wallet.setWallet(walletId);
+  try {
+    await wallet.getAddress();
+  } catch (_) {
+    /* ignore */
+  }
+
+  const result = await wallet.signMessage(message, {
+    networkPassphrase: network.networkPassphrase,
+    address,
+  });
+  const signed = (result as { signedMessage?: unknown })?.signedMessage;
+  if (!signed) throw new Error("The wallet did not return a signature");
+  if (typeof signed === "string") return signed;
+  // Some Freighter versions return bytes rather than a base64 string.
+  const bytes =
+    signed instanceof Uint8Array
+      ? signed
+      : new Uint8Array(
+          ((signed as { data?: number[] }).data ?? []) as number[],
+        );
+  let binary = "";
+  bytes.forEach((b) => (binary += String.fromCharCode(b)));
+  return btoa(binary);
+};

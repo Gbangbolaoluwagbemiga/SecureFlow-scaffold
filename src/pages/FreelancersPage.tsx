@@ -1,3 +1,4 @@
+import { VerifiedBadge } from "@/components/verification/verified-badge";
 import { useState, useEffect, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useWeb3 } from "@/contexts/web3-context";
@@ -374,6 +375,7 @@ function FreelancerCard({
                 {short}
               </p>
               <div className="mt-1 flex flex-wrap gap-1.5">
+                <VerifiedBadge address={profile.address} />
                 <Badge
                   variant="outline"
                   className={`text-xs gap-1 ${BADGE_STYLES[profile.badge] ?? BADGE_STYLES.Beginner}`}

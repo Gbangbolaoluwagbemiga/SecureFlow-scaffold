@@ -4,8 +4,8 @@
   "description": "Trustless payments with transparent milestones powered by Stellar",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#000000",
-  "theme_color": "#6366f1",
+  "background_color": "#0B1222",
+  "theme_color": "#0B1222",
   "icons": [
     {
       "src": "/secureflow-logo.svg",
@@ -13,12 +13,12 @@
       "type": "image/svg+xml"
     },
     {
-      "src": "/placeholder-logo.png",
+      "src": "/secureflow-icon-192.png",
       "sizes": "192x192",
       "type": "image/png"
     },
     {
-      "src": "/placeholder-logo.png",
+      "src": "/secureflow-icon-512.png",
       "sizes": "512x512",
       "type": "image/png"
     }

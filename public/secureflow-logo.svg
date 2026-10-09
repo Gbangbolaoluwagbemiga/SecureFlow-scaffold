@@ -1,36 +1,29 @@
-<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <!-- Background circle with gradient -->
+<!--
+  SecureFlow app icon: the drop mark (secureflow-mark.svg) on the dark tile.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <rect width="64" height="64" rx="15" fill="#0B1222"/>
+  <rect x=".5" y=".5" width="63" height="63" rx="14.5" stroke="#1E293B"/>
+  <g transform="translate(32 32.4) scale(.86) translate(-32 -32.25)">
   <defs>
-    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#3B82F6;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#1D4ED8;stop-opacity:1" />
+    <linearGradient id="sfl-shallow" x1="22" y1="8" x2="36" y2="44" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#67E8F9"/>
+      <stop offset="1" stop-color="#06B6D4"/>
     </linearGradient>
-    <linearGradient id="shieldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#FFFFFF;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#E5E7EB;stop-opacity:1" />
+    <linearGradient id="sfl-deep" x1="44" y1="26" x2="26" y2="58" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2563EB"/>
+      <stop offset="1" stop-color="#172554"/>
     </linearGradient>
-    <linearGradient id="flowGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#10B981;stop-opacity:1" />
-      <stop offset="100%" style="stop-color:#059669;stop-opacity:1" />
-    </linearGradient>
+    <clipPath id="sfl-drop"><path d="M32 6.5C32 6.5 15 25.5 15 39.5A17 17 0 0 0 49 39.5C49 25.5 32 6.5 32 6.5Z"/></clipPath>
+    <mask id="sfl-carve" maskUnits="userSpaceOnUse" x="0" y="0" width="64" height="64">
+      <rect width="64" height="64" fill="#fff"/>
+      <path d="M38.8 26.2C34.8 22.6 25.6 23.4 25.6 29.6C25.6 35.4 38.6 34.4 38.6 42C38.6 48.4 29.2 50 24.6 46" stroke="#000" stroke-width="5" stroke-linecap="round"/>
+    </mask>
   </defs>
-  
-  <!-- Background circle -->
-  <circle cx="16" cy="16" r="16" fill="url(#bgGradient)"/>
-  
-  <!-- Shield shape -->
-  <path d="M16 4L22 8V16C22 20.4183 18.4183 24 14 24C9.58172 24 6 20.4183 6 16V8L12 4L16 4Z" fill="url(#shieldGradient)" stroke="#1D4ED8" stroke-width="0.5"/>
-  
-  <!-- Inner shield -->
-  <path d="M16 6L20 9V16C20 19.3137 17.3137 22 14 22C10.6863 22 8 19.3137 8 16V9L12 6L16 6Z" fill="none" stroke="#3B82F6" stroke-width="1"/>
-  
-  <!-- Flow arrows -->
-  <path d="M10 12L14 16L10 20" stroke="url(#flowGradient)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-  <path d="M18 12L22 16L18 20" stroke="url(#flowGradient)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-  
-  <!-- Central dot -->
-  <circle cx="16" cy="16" r="2" fill="url(#flowGradient)"/>
-  
-  <!-- Security checkmark -->
-  <path d="M12 14L14 16L20 10" stroke="#10B981" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <g clip-path="url(#sfl-drop)" mask="url(#sfl-carve)">
+    <rect width="64" height="64" fill="url(#sfl-deep)"/>
+    <path d="M50 18L38.8 26.2C34.8 22.6 25.6 23.4 25.6 29.6C25.6 35.4 38.6 34.4 38.6 42C38.6 48.4 29.2 50 24.6 46L8 58H0V0H64V18Z" fill="url(#sfl-shallow)"/>
+  </g>
+  <path d="M18.6 41.5C18.3 37.6 19.2 33.4 21.1 29.6" stroke="#FFFFFF" stroke-opacity=".7" stroke-width="1.8" stroke-linecap="round"/>
+  </g>
 </svg>
