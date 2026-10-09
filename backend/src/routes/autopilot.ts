@@ -141,11 +141,9 @@ autopilotRouter.post("/preview", async (req, res) => {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[autopilot] preview failed:", msg);
-    res
-      .status(502)
-      .json({
-        error: "Autopilot could not write criteria just now. Try again.",
-      });
+    res.status(502).json({
+      error: "Autopilot could not write criteria just now. Try again.",
+    });
   }
 });
 
@@ -180,18 +178,14 @@ autopilotRouter.post("/handover", async (req, res) => {
     windowMinutes < MIN_WINDOW ||
     windowMinutes > MAX_WINDOW
   ) {
-    return void res
-      .status(400)
-      .json({
-        error: "Application window must be between 1 minute and 7 days",
-      });
+    return void res.status(400).json({
+      error: "Application window must be between 1 minute and 7 days",
+    });
   }
   if (criteria.length < 1 || criteria.some((c) => c.length > 400)) {
-    return void res
-      .status(400)
-      .json({
-        error: "Give between 1 and 10 criteria, each under 400 characters",
-      });
+    return void res.status(400).json({
+      error: "Give between 1 and 10 criteria, each under 400 characters",
+    });
   }
   const issuedAt = Date.parse(issued);
   if (
@@ -221,19 +215,15 @@ autopilotRouter.post("/handover", async (req, res) => {
     if (!escrow)
       return void res.status(404).json({ error: "Escrow not found" });
     if (escrow.depositor !== client) {
-      return void res
-        .status(403)
-        .json({
-          error: "Only the client who posted this job can hand it over",
-        });
+      return void res.status(403).json({
+        error: "Only the client who posted this job can hand it over",
+      });
     }
     const status = chain.enumName(escrow.status);
     if (status !== "Pending" && status !== "InProgress") {
-      return void res
-        .status(409)
-        .json({
-          error: `This job is ${status.toLowerCase()} and can't be handed over`,
-        });
+      return void res.status(409).json({
+        error: `This job is ${status.toLowerCase()} and can't be handed over`,
+      });
     }
 
     const preview = store.getPreview(id);

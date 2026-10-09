@@ -27,7 +27,10 @@ export function isApiConfigured(): boolean {
   return Boolean(getApiBase());
 }
 
-export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+export async function apiFetch<T>(
+  path: string,
+  init?: RequestInit,
+): Promise<T> {
   const base = getApiBase();
   if (!base) {
     throw new Error("VITE_API_URL is not set (required for production builds)");
