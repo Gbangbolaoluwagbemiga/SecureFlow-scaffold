@@ -23,6 +23,7 @@ import { MilestoneActions } from "@/components/milestone-actions";
 import { MilestoneNegotiation } from "@/components/milestone-negotiation";
 import { JobManagement } from "@/components/job-management";
 import { AutopilotPanel } from "@/components/autopilot/autopilot-panel";
+import { AutopilotBadge } from "@/components/autopilot/autopilot-badge";
 import { EvidenceSubmissionButton } from "@/components/evidence-submission-button";
 import { ViewEvidenceButton } from "@/components/view-evidence-button";
 import { parseAttachment } from "@/lib/utils";
@@ -220,6 +221,7 @@ export function EscrowCard({
               {escrow.isClient && !isOpenJob && (
                 <VerifiedBadge address={escrow.beneficiary} />
               )}
+              {!isOpenJob && <AutopilotBadge escrowId={escrow.id} />}
               <Badge className={getStatusColor(displayStatus)}>
                 {displayStatus}
               </Badge>

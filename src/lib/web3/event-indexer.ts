@@ -75,6 +75,7 @@ export const EVENT_TYPES = {
   MILESTONE_PROPOSAL_APPROVED: "milestone_proposal_approved",
   MILESTONE_PROPOSAL_REJECTED: "milestone_proposal_rejected",
   JOB_MANAGER_SET: "job_manager_set",
+  JOB_MANAGER_REVOKED: "job_manager_revoked",
   JOB_FUNDS_UPDATED: "job_funds_updated",
   RATING_SUBMITTED: "rating_submitted",
 } as const;

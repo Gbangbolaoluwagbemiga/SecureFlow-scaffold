@@ -28,6 +28,7 @@ import {
   IndexedEvent,
   EVENT_TYPES,
 } from "@/lib/web3/event-indexer";
+import { getAutopilotInfo } from "@/lib/autopilot";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -57,6 +58,8 @@ const STATE_CHANGING_EVENTS = new Set([
   EVENT_TYPES.MILESTONE_PROPOSAL_APPROVED,
   EVENT_TYPES.MILESTONE_PROPOSAL_REJECTED,
   EVENT_TYPES.JOB_FUNDS_UPDATED,
+  EVENT_TYPES.JOB_MANAGER_SET,
+  EVENT_TYPES.JOB_MANAGER_REVOKED,
 ]);
 
 // ─── Dedup helpers ────────────────────────────────────────────────────────────
@@ -369,6 +372,49 @@ export function EventPoller() {
             actionUrl: "/freelancer?tab=applications",
             data: { escrowId },
           });
+          toNotify.push(event.id);
+          needsRefresh = true;
+          continue;
+        }
+
+        // A change of manager is addressed to the manager, but the freelancer
+        // on the job is the one whose work will now be judged by someone
+        // else — so they hear about it too, and in plain terms when the new
+        // manager is Autopilot.
+        if (
+          (event.eventType === EVENT_TYPES.JOB_MANAGER_SET ||
+            event.eventType === EVENT_TYPES.JOB_MANAGER_REVOKED) &&
+          event.topics[2] !== me
+        ) {
+          const escrowId = getEscrowIdFromTopics(event.topics);
+          const escrow =
+            escrowId === null
+              ? null
+              : await contractService
+                  .getEscrow(Number(escrowId))
+                  .catch(() => null);
+          if (escrow?.freelancer === me) {
+            const info = await getAutopilotInfo();
+            const isAutopilot = !!info?.agent && event.topics[2] === info.agent;
+            const set = event.eventType === EVENT_TYPES.JOB_MANAGER_SET;
+            addNotification({
+              type: "escrow",
+              title: set
+                ? isAutopilot
+                  ? "Autopilot is now in charge"
+                  : "Your job has a new manager"
+                : isAutopilot
+                  ? "Autopilot handed back"
+                  : "Your client is back in charge",
+              message: set
+                ? isAutopilot
+                  ? `The client handed job #${escrowId} to Autopilot. It reviews each delivery against the job's published criteria, explains anything to fix, and brings in a human arbiter after ${info?.maxRounds ?? 3} failed attempts.`
+                  : `The client appointed a manager for job #${escrowId}. They now review and approve your deliveries.`
+                : `The client took job #${escrowId} back and reviews your deliveries themselves again.`,
+              actionUrl: `/freelancer?escrow=${escrowId}`,
+              data: { escrowId },
+            });
+          }
           toNotify.push(event.id);
           needsRefresh = true;
           continue;

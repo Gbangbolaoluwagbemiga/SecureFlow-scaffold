@@ -26,6 +26,7 @@ import { Textarea } from "@/components/ui/textarea";
 // import { Label } from "@/components/ui/label"; // Unused
 import { translateContractError } from "@/lib/web3/contract-errors";
 import { VerifiedBadge } from "@/components/verification/verified-badge";
+import { AutopilotBadge } from "@/components/autopilot/autopilot-badge";
 import { IdentityVerificationCard } from "@/components/verification/identity-verification-card";
 import { MyApplications } from "@/components/freelancer/my-applications";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -1594,7 +1595,8 @@ export default function FreelancerPage() {
                                     : `Project ID: #${escrow.id}`}
                                 </CardDescription>
                               </div>
-                              <div className="flex items-center gap-2">
+                              <div className="flex flex-wrap items-center justify-end gap-2">
+                                <AutopilotBadge escrowId={escrow.id} />
                                 <Badge
                                   className={getStatusColor(
                                     escrow.milestones.some(
