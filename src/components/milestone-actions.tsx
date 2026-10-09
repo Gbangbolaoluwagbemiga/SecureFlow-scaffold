@@ -574,7 +574,7 @@ export function MilestoneActions({
 
       {/* Confirmation Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="glass">
+        <DialogContent className="glass max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <div className="flex items-center gap-3 mb-2">
               <div className="flex items-center justify-center w-12 h-12 rounded-full bg-primary/10">
@@ -651,7 +651,7 @@ export function MilestoneActions({
                   <label className="block text-sm font-medium text-red-600 mb-2">
                     Rejection Reason
                   </label>
-                  <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800 whitespace-pre-line">
+                  <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800 whitespace-pre-line max-h-64 overflow-y-auto">
                     {milestone.rejectionReason}
                   </div>
                 </div>
