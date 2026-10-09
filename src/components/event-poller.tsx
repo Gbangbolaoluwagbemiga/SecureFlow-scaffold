@@ -307,9 +307,23 @@ export function EventPoller() {
     const dispatchRefresh = () =>
       window.dispatchEvent(new CustomEvent("escrowUpdated"));
 
-    const poll = async () => {
-      if (document.visibilityState === "hidden") return;
+    // One pass at a time. Polls are triggered by a timer AND by the tab
+    // becoming visible, which a wallet popup does several times in a row; with
+    // network reads inside the loop, overlapping passes each saw the same
+    // event as new and notified it once apiece.
+    let running = false;
 
+    const poll = async () => {
+      if (document.visibilityState === "hidden" || running) return;
+      running = true;
+      try {
+        await pollOnce();
+      } finally {
+        running = false;
+      }
+    };
+
+    const pollOnce = async () => {
       const me = wallet.address!;
       let newEvents: IndexedEvent[];
       try {
@@ -354,6 +368,10 @@ export function EventPoller() {
 
       for (const event of stored) {
         if (event.ledger <= since || notifiedIds.has(event.id)) continue;
+        // Claim the event before any await below, so nothing else — another
+        // tab, or a pass that slipped past the guard — notifies it again.
+        notifiedIds.add(event.id);
+        markNotified(me, [event.id]);
 
         if (
           (event.eventType === EVENT_TYPES.FREELANCER_ACCEPTED ||
