@@ -1,5 +1,5 @@
-<!-- SecureFlow mark, favicon cut: heavier stroke and tighter margins so it
-     stays legible at 16px. Same geometry as secureflow-logo.svg. -->
+<!-- SecureFlow mark, favicon cut: heavier stroke, slightly larger drop and
+     tighter margins so it stays legible at 16px. Same geometry otherwise. -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="4 4 56 56" fill="none">
   <defs>
     <linearGradient id="sf-ink" x1="13" y1="48" x2="51" y2="17" gradientUnits="userSpaceOnUse">
@@ -8,7 +8,8 @@
     </linearGradient>
   </defs>
   <rect x="4" y="4" width="56" height="56" rx="13" fill="#0B1222"/>
-  <path d="M13.2 43.2C16.6 48.6 30.2 49.4 30.2 40.6C30.2 32.4 13.6 33.6 13.6 25C13.6 16.8 24.2 15.6 29.4 17.4L51 17.4" stroke="url(#sf-ink)" stroke-width="6.4" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M13.2 43.2C16.6 48.6 30.2 49.4 30.2 40.6C30.2 32.4 13.6 33.6 13.6 25C13.6 16.8 24.2 15.6 29.4 17.4L49.6 17.4" stroke="url(#sf-ink)" stroke-width="6.4" stroke-linecap="round" stroke-linejoin="round"/>
   <path d="M37.6 17.4V48" stroke="url(#sf-ink)" stroke-width="6.4" stroke-linecap="round"/>
-  <path d="M37.6 32.6H45.2" stroke="#FFFFFF" stroke-width="6.4" stroke-linecap="round"/>
+  <path d="M37.6 32.6H42.4" stroke="#FFFFFF" stroke-width="6.4" stroke-linecap="round"/>
+  <path d="M51 28C51 28 55.2 32.83 55.2 36.61A4.2 4.2 0 0 1 46.8 36.61C46.8 32.83 51 28 51 28Z" fill="#22D3EE"/>
 </svg>

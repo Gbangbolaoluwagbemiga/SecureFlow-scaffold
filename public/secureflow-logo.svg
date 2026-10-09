@@ -1,8 +1,8 @@
 <!--
   SecureFlow mark.
   One continuous stroke: the S flows straight into the F's top bar — funds in
-  motion resolving into a straight, secured line. The F's middle bar is the one
-  solid white step: a released milestone.
+  motion. The F's middle bar is the one solid white step: a released milestone.
+  And off the end of the current falls a single drop: a payment landing.
 -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
   <defs>
@@ -10,10 +10,15 @@
       <stop offset="0" stop-color="#3B82F6"/>
       <stop offset="1" stop-color="#22D3EE"/>
     </linearGradient>
+    <linearGradient id="sf-drop" x1="50.5" y1="28.5" x2="50.5" y2="39" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#67E8F9"/>
+      <stop offset="1" stop-color="#22D3EE"/>
+    </linearGradient>
   </defs>
   <rect width="64" height="64" rx="15" fill="#0B1222"/>
   <rect x=".5" y=".5" width="63" height="63" rx="14.5" stroke="#1E293B"/>
-  <path d="M13.2 43.2C16.6 48.6 30.2 49.4 30.2 40.6C30.2 32.4 13.6 33.6 13.6 25C13.6 16.8 24.2 15.6 29.4 17.4L51 17.4" stroke="url(#sf-ink)" stroke-width="5.4" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M13.2 43.2C16.6 48.6 30.2 49.4 30.2 40.6C30.2 32.4 13.6 33.6 13.6 25C13.6 16.8 24.2 15.6 29.4 17.4L50 17.4" stroke="url(#sf-ink)" stroke-width="5.4" stroke-linecap="round" stroke-linejoin="round"/>
   <path d="M37.6 17.4V48" stroke="url(#sf-ink)" stroke-width="5.4" stroke-linecap="round"/>
-  <path d="M37.6 32.6H45.2" stroke="#FFFFFF" stroke-width="5.4" stroke-linecap="round"/>
+  <path d="M37.6 32.6H43" stroke="#FFFFFF" stroke-width="5.4" stroke-linecap="round"/>
+  <path d="M50.5 28.5C50.5 28.5 53.9 32.41 53.9 35.47A3.4 3.4 0 0 1 47.1 35.47C47.1 32.41 50.5 28.5 50.5 28.5Z" fill="url(#sf-drop)"/>
 </svg>
