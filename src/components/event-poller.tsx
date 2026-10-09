@@ -145,6 +145,12 @@ function isAddressedTo(address: string, event: IndexedEvent): boolean {
   return false;
 }
 
+/** When the event happened on-chain, so a caught-up event isn't "just now". */
+function eventTime(event: IndexedEvent): Date | undefined {
+  const t = Date.parse(event.timestamp);
+  return Number.isFinite(t) ? new Date(t) : undefined;
+}
+
 // ─── Notification builder ─────────────────────────────────────────────────────
 
 function buildNotification(
@@ -381,15 +387,19 @@ export function EventPoller() {
         ) {
           const escrowId = getEscrowIdFromTopics(event.topics);
           const filled = event.eventType === EVENT_TYPES.FREELANCER_ACCEPTED;
-          addNotification({
-            type: "application",
-            title: filled ? "Position Filled" : "Job Cancelled",
-            message: filled
-              ? `The client hired another freelancer for job #${escrowId}. Thanks for applying!`
-              : `The client cancelled job #${escrowId}, which you applied to.`,
-            actionUrl: "/freelancer?tab=applications",
-            data: { escrowId },
-          });
+          addNotification(
+            {
+              type: "application",
+              title: filled ? "Position Filled" : "Job Cancelled",
+              message: filled
+                ? `The client hired another freelancer for job #${escrowId}. Thanks for applying!`
+                : `The client cancelled job #${escrowId}, which you applied to.`,
+              actionUrl: "/freelancer?tab=applications",
+              data: { escrowId },
+            },
+            undefined,
+            { timestamp: eventTime(event) },
+          );
           toNotify.push(event.id);
           needsRefresh = true;
           continue;
@@ -415,23 +425,27 @@ export function EventPoller() {
             const info = await getAutopilotInfo();
             const isAutopilot = !!info?.agent && event.topics[2] === info.agent;
             const set = event.eventType === EVENT_TYPES.JOB_MANAGER_SET;
-            addNotification({
-              type: "escrow",
-              title: set
-                ? isAutopilot
-                  ? "Autopilot is now in charge"
-                  : "Your job has a new manager"
-                : isAutopilot
-                  ? "Autopilot handed back"
-                  : "Your client is back in charge",
-              message: set
-                ? isAutopilot
-                  ? `The client handed job #${escrowId} to Autopilot. It reviews each delivery against the job's published criteria, explains anything to fix, and brings in a human arbiter after ${info?.maxRounds ?? 3} failed attempts.`
-                  : `The client appointed a manager for job #${escrowId}. They now review and approve your deliveries.`
-                : `The client took job #${escrowId} back and reviews your deliveries themselves again.`,
-              actionUrl: `/freelancer?escrow=${escrowId}`,
-              data: { escrowId },
-            });
+            addNotification(
+              {
+                type: "escrow",
+                title: set
+                  ? isAutopilot
+                    ? "Autopilot is now in charge"
+                    : "Your job has a new manager"
+                  : isAutopilot
+                    ? "Autopilot handed back"
+                    : "Your client is back in charge",
+                message: set
+                  ? isAutopilot
+                    ? `The client handed job #${escrowId} to Autopilot. It reviews each delivery against the job's published criteria, explains anything to fix, and brings in a human arbiter after ${info?.maxRounds ?? 3} failed attempts.`
+                    : `The client appointed a manager for job #${escrowId}. They now review and approve your deliveries.`
+                  : `The client took job #${escrowId} back and reviews your deliveries themselves again.`,
+                actionUrl: `/freelancer?escrow=${escrowId}`,
+                data: { escrowId },
+              },
+              undefined,
+              { timestamp: eventTime(event) },
+            );
           }
           toNotify.push(event.id);
           needsRefresh = true;
@@ -450,7 +464,11 @@ export function EventPoller() {
         }
 
         const notification = buildNotification(event);
-        if (notification) addNotification(notification);
+        if (notification) {
+          addNotification(notification, undefined, {
+            timestamp: eventTime(event),
+          });
+        }
         toNotify.push(event.id);
         if (STATE_CHANGING_EVENTS.has(event.eventType as never)) {
           needsRefresh = true;

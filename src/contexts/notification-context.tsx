@@ -18,6 +18,45 @@ import {
   type RemoteNotificationRow,
 } from "@/lib/api";
 
+/**
+ * One notification per happening. An on-chain action reaches the other party
+ * twice: the actor's app posts it through the API, and the recipient's own
+ * event poller turns the contract event into a notification. Both say the
+ * same thing about the same escrow and milestone within moments of each
+ * other, so they collapse into one; the API copy wins because its read state
+ * syncs across devices.
+ */
+const DUPLICATE_WINDOW_MS = 5 * 60_000;
+
+function notificationKey(n: Notification): string {
+  const d = (n.data ?? {}) as Record<string, unknown>;
+  return [n.title, d.escrowId ?? "", d.milestoneIndex ?? ""]
+    .map(String)
+    .join("|");
+}
+
+function collapseDuplicates(list: Notification[]): Notification[] {
+  const isLocal = (n: Notification) => n.id.startsWith("notification_");
+  // Remote first, so it is the copy that survives.
+  const ordered = [...list].sort(
+    (a, b) => Number(isLocal(a)) - Number(isLocal(b)),
+  );
+  const kept: Notification[] = [];
+  const seen = new Map<string, number[]>();
+  for (const n of ordered) {
+    const key = notificationKey(n);
+    const t = n.timestamp.getTime();
+    const times = seen.get(key) ?? [];
+    if (times.some((other) => Math.abs(other - t) <= DUPLICATE_WINDOW_MS)) {
+      continue;
+    }
+    times.push(t);
+    seen.set(key, times);
+    kept.push(n);
+  }
+  return kept.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+}
+
 function mergeRemoteNotifications(
   remote: RemoteNotificationRow[],
   localState: Notification[],
@@ -38,9 +77,7 @@ function mergeRemoteNotifications(
   for (const n of legacy) {
     if (!byId.has(n.id)) byId.set(n.id, n);
   }
-  return Array.from(byId.values()).sort(
-    (a, b) => b.timestamp.getTime() - a.timestamp.getTime(),
-  );
+  return collapseDuplicates(Array.from(byId.values()));
 }
 
 export interface Notification {
@@ -66,6 +103,7 @@ interface NotificationContextType {
   addNotification: (
     notification: Omit<Notification, "id" | "timestamp" | "read">,
     targetAddresses?: string[],
+    options?: { timestamp?: Date },
   ) => void;
   markAsRead: (id: string) => void;
   markAllAsRead: () => void;
@@ -197,11 +235,14 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   const addNotification = (
     notification: Omit<Notification, "id" | "timestamp" | "read">,
     targetAddresses?: string[], // Optional: specific addresses to notify
+    // When it happened, if not now: a contract event caught up on later
+    // should say "3 hours ago", not "just now".
+    options?: { timestamp?: Date },
   ) => {
     const newNotification: Notification = {
       ...notification,
       id: `notification_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      timestamp: new Date(),
+      timestamp: options?.timestamp ?? new Date(),
       read: false,
     };
 
@@ -213,7 +254,9 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       (current ? targets.some((a) => a.toLowerCase() === current) : false);
 
     if (shouldNotifyCurrent) {
-      setNotifications((prev) => [newNotification, ...prev]);
+      setNotifications((prev) =>
+        collapseDuplicates([newNotification, ...prev]),
+      );
     }
 
     // Send cross-wallet notifications via backend API (Supabase) so the
@@ -257,8 +300,12 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       });
     }
 
+    // Pop a toast only for what just happened; events caught up on later
+    // go quietly into the bell.
+    const isFresh = Date.now() - newNotification.timestamp.getTime() < 120_000;
     if (
       shouldNotifyCurrent &&
+      isFresh &&
       (notification.type === "milestone" || notification.type === "dispute")
     ) {
       toast({
