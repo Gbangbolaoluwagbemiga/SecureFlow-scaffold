@@ -26,7 +26,10 @@ import { Textarea } from "@/components/ui/textarea";
 // import { Label } from "@/components/ui/label"; // Unused
 import { translateContractError } from "@/lib/web3/contract-errors";
 import { VerifiedBadge } from "@/components/verification/verified-badge";
-import { AutopilotBadge } from "@/components/autopilot/autopilot-badge";
+import {
+  AutopilotBadge,
+  AutopilotReviewing,
+} from "@/components/autopilot/autopilot-badge";
 import { IdentityVerificationCard } from "@/components/verification/identity-verification-card";
 import { MyApplications } from "@/components/freelancer/my-applications";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -2240,6 +2243,12 @@ export default function FreelancerPage() {
                                             <p className="text-sm text-yellow-700 dark:text-yellow-300">
                                               Awaiting client approval...
                                             </p>
+                                            <div className="mt-2">
+                                              <AutopilotReviewing
+                                                escrowId={escrow.id}
+                                                audience="freelancer"
+                                              />
+                                            </div>
                                           </div>
                                           <div className="flex gap-2">
                                             <Badge className="bg-yellow-100 dark:bg-yellow-800 text-yellow-800 dark:text-yellow-100">
@@ -2463,6 +2472,12 @@ export default function FreelancerPage() {
                                             Your milestone has been submitted
                                             and is waiting for client approval.
                                           </p>
+                                          <div className="mb-3">
+                                            <AutopilotReviewing
+                                              escrowId={escrow.id}
+                                              audience="freelancer"
+                                            />
+                                          </div>
                                           <Button
                                             size="sm"
                                             variant="outline"

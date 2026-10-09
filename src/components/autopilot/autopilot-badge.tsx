@@ -1,14 +1,13 @@
 import { useEffect, useState } from "react";
+import { Loader2 } from "lucide-react";
 import { contractService } from "@/lib/web3/contract-service";
 import { getAutopilotInfo } from "@/lib/autopilot";
 
-/**
- * Amber pill shown to the freelancer while Autopilot is managing their job.
- * Read from the chain (who the job manager is), so it is right even when the
- * Autopilot service is unreachable, and re-checked whenever an escrow event
- * lands — handing over and taking back both emit one.
- */
-export function AutopilotBadge({ escrowId }: { escrowId: number | string }) {
+/** Is Autopilot the job manager on-chain right now? Re-checked on every escrow event. */
+export function useAutopilotManaged(escrowId: number | string): {
+  active: boolean;
+  rounds: number;
+} {
   const [active, setActive] = useState(false);
   const [rounds, setRounds] = useState(3);
 
@@ -32,6 +31,51 @@ export function AutopilotBadge({ escrowId }: { escrowId: number | string }) {
     };
   }, [escrowId]);
 
+  return { active, rounds };
+}
+
+/**
+ * Shown on a delivered milestone while Autopilot is the one reviewing it, so
+ * neither side stares at a static "submitted" and wonders if anything is
+ * happening. Renders nothing on jobs Autopilot isn't running.
+ */
+export function AutopilotReviewing({
+  escrowId,
+  audience,
+}: {
+  escrowId: number | string;
+  audience: "client" | "freelancer";
+}) {
+  const { active } = useAutopilotManaged(escrowId);
+  if (!active) return null;
+  return (
+    <div className="flex items-center gap-2.5 rounded-lg border border-amber-500/40 bg-amber-500/[0.07] px-3 py-2 text-sm">
+      <Loader2 className="h-4 w-4 shrink-0 animate-spin text-amber-500" />
+      <span>
+        <span className="font-medium text-amber-600 dark:text-amber-300">
+          Autopilot is reviewing {audience === "freelancer" ? "your" : "this"}{" "}
+          delivery
+        </span>
+        <span className="text-muted-foreground">
+          {" "}
+          against the job&apos;s criteria — usually within a minute.
+          {audience === "freelancer"
+            ? " You'll get a notification with the result."
+            : " It approves and pays, or sends it back with feedback."}
+        </span>
+      </span>
+    </div>
+  );
+}
+
+/**
+ * Amber pill shown to the freelancer while Autopilot is managing their job.
+ * Read from the chain (who the job manager is), so it is right even when the
+ * Autopilot service is unreachable, and re-checked whenever an escrow event
+ * lands — handing over and taking back both emit one.
+ */
+export function AutopilotBadge({ escrowId }: { escrowId: number | string }) {
+  const { active, rounds } = useAutopilotManaged(escrowId);
   if (!active) return null;
   return (
     <span

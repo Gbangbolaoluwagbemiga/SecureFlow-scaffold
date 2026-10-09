@@ -270,6 +270,9 @@ Do not confuse a claim with a fact. If <inspected_deliverable> shows what the li
 it over the freelancer's description. If nothing could be inspected, you are reading a description
 of work: never state that a file "is" a format or size as though you checked.
 
+A claim is never a substitute for the work. If a criterion depends on the delivered work and the
+work is not there to look at (a missing file, a link that does not open), it FAILS.
+
 Being unable to verify something is NOT grounds to reject. Originality, licensing and matters of
 taste cannot be checked from a file: take the freelancer at their word, pass the criterion, and say
 in the note that it rests on their assertion. Reject only when something is positively wrong or
@@ -305,6 +308,25 @@ export async function reviewDelivery(input: {
       ].filter((l): l is string => !!l && /^https?:\/\//.test(l)),
     ),
   ].slice(0, 2);
+  // "I am done" is a claim, not a delivery. With nothing to open there is
+  // nothing to judge, so no model is asked: every criterion is unmet, plainly.
+  if (links.length === 0 && input.evidence.length === 0) {
+    return {
+      approved: false,
+      score: 0,
+      summary: "Nothing was delivered: no link and no attachment.",
+      feedback:
+        "No work was attached, so there is nothing to review. Resubmit with a link to the work itself " +
+        "(a repository, a hosted file or page, or an uploaded attachment), and say briefly how it meets each criterion.",
+      results: input.criteria.map((criterion) => ({
+        criterion,
+        passed: false,
+        note: "Nothing was delivered to check this against.",
+        inScope: true,
+      })),
+    };
+  }
+
   const inspected = await Promise.all(links.map((l) => fetchReadable(l, 3000)));
   const inspection = links.length
     ? links
@@ -385,19 +407,5 @@ ${
     },
   });
 
-  // Approving work that points at nothing would pay for a sentence. Ask for
-  // the work itself; this costs the freelancer a round, not their money.
-  const hasDeliverable = links.length > 0 || input.evidence.length > 0;
-  if (review.approved && !hasDeliverable) {
-    return {
-      ...review,
-      approved: false,
-      score: Math.min(review.score, 40),
-      feedback:
-        "No deliverable was attached — there is no link or file to check against the criteria. " +
-        "Resubmit with a link to the work itself (a repo, a hosted file or an uploaded attachment).\n\n" +
-        review.feedback,
-    };
-  }
   return review;
 }

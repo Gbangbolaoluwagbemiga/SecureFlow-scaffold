@@ -310,6 +310,7 @@ export function EscrowCard({
                       description:
                         (m as any).originalDescription ?? m.description ?? "",
                       amount: m.amount,
+                      status: m.status,
                     }))}
                   />
                 )}

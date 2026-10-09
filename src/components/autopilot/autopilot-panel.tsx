@@ -126,7 +126,7 @@ export function AutopilotPanel({
   escrowId: number;
   status: string;
   hasFreelancer: boolean;
-  milestones: { description: string; amount: string }[];
+  milestones: { description: string; amount: string; status?: string }[];
 }) {
   const { wallet } = useWeb3();
   const { toast } = useToast();
@@ -269,18 +269,23 @@ export function AutopilotPanel({
   }
 
   const phase = job?.phase;
+  const reviewingIndex = milestones.findIndex((m) => m.status === "submitted");
   const headline =
     phase === "hiring"
       ? countdown
         ? `Taking applications — judging them in ${countdown}`
         : "Scoring applicants as they arrive"
-      : phase === "working"
-        ? "Freelancer hired — reviewing each delivery"
-        : phase === "disputed"
-          ? "Escalated — a human arbiter now decides"
-          : phase === "completed"
-            ? "Every milestone approved and paid"
-            : "Starting up…";
+      : phase === "working" && reviewingIndex >= 0
+        ? `Reviewing milestone ${reviewingIndex + 1}'s delivery now…`
+        : phase === "working"
+          ? "Freelancer hired — waiting for the next delivery"
+          : phase === "disputed"
+            ? "Escalated — a human arbiter now decides"
+            : phase === "completed"
+              ? "Every milestone approved and paid"
+              : job
+                ? "Starting up…"
+                : "Connecting to Autopilot…";
   const decisions = job?.decisions ?? [];
   const shown = showAll ? decisions : decisions.slice(0, 5);
 
@@ -298,7 +303,12 @@ export function AutopilotPanel({
           <h4 className="mt-2 text-lg font-semibold text-amber-600 dark:text-amber-300">
             Autopilot is running this job
           </h4>
-          <p className="text-sm text-muted-foreground">{headline}</p>
+          <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+            {reviewingIndex >= 0 && phase === "working" && (
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-500" />
+            )}
+            {headline}
+          </p>
         </div>
         <Button
           variant="outline"

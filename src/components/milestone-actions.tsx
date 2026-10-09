@@ -25,6 +25,10 @@ import {
   XCircle,
 } from "lucide-react";
 import type { Milestone } from "@/lib/web3/types";
+import {
+  AutopilotReviewing,
+  useAutopilotManaged,
+} from "@/components/autopilot/autopilot-badge";
 
 interface MilestoneActionsProps {
   escrowId: string;
@@ -74,9 +78,16 @@ export function MilestoneActions({
   const [resubmitMessage, setResubmitMessage] = useState("");
 
   // Helper functions
+  // While Autopilot runs the job it approves and rejects; the client keeps
+  // the dispute right and can take the job back to act by hand.
+  const { active: autopilotActive } = useAutopilotManaged(escrowId);
+
   const canApproveMilestone = () => {
     const canApprove =
-      milestone.status === "submitted" && isPayer && escrowStatus === "active";
+      milestone.status === "submitted" &&
+      isPayer &&
+      escrowStatus === "active" &&
+      !autopilotActive;
     return canApprove;
   };
 
@@ -393,6 +404,16 @@ export function MilestoneActions({
 
   return (
     <>
+      {milestone.status === "submitted" &&
+        autopilotActive &&
+        !isProjectTerminated && (
+          <div className="mb-2 w-full">
+            <AutopilotReviewing
+              escrowId={escrowId}
+              audience={isPayer ? "client" : "freelancer"}
+            />
+          </div>
+        )}
       <div className="flex items-center gap-2">
         {/* Approve Milestone - Only payer for submitted milestones (disabled if terminated) */}
         {canApproveMilestone() && !isProjectTerminated && (
