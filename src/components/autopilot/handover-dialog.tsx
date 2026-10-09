@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
   BadgeCheck,
@@ -18,7 +18,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { contractService } from "@/lib/web3/contract-service";
 import { translateContractError } from "@/lib/web3/contract-errors";
@@ -38,6 +37,67 @@ const WINDOWS = [
 ];
 
 type Step = "idle" | "signing" | "appointing";
+
+/**
+ * One criterion, shown as the full sentence it is. It reads like text and
+ * edits in place: the box wraps and grows with what's typed, so a long
+ * criterion is never cut off mid-word the way a one-line input cut it.
+ */
+function CriterionRow({
+  index,
+  value,
+  disabled,
+  canRemove,
+  autoFocus,
+  onChange,
+  onRemove,
+}: {
+  index: number;
+  value: string;
+  disabled: boolean;
+  canRemove: boolean;
+  autoFocus: boolean;
+  onChange: (value: string) => void;
+  onRemove: () => void;
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [value]);
+  useEffect(() => {
+    if (autoFocus) ref.current?.focus();
+  }, [autoFocus]);
+
+  return (
+    <div className="group flex items-start gap-3 rounded-lg border border-border/60 bg-muted/20 px-3 py-2.5 transition focus-within:border-amber-500/60 focus-within:bg-amber-500/[0.04] hover:border-border">
+      <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-amber-500/15 text-[11px] font-semibold text-amber-600 dark:text-amber-300">
+        {index + 1}
+      </span>
+      <textarea
+        ref={ref}
+        rows={1}
+        value={value}
+        disabled={disabled}
+        placeholder="Something the delivered work must do or contain"
+        aria-label={`Criterion ${index + 1}`}
+        onChange={(e) => onChange(e.target.value)}
+        className="min-w-0 flex-1 resize-none overflow-hidden bg-transparent text-sm leading-relaxed outline-none placeholder:text-muted-foreground/60 disabled:opacity-70"
+      />
+      <button
+        type="button"
+        aria-label={`Remove criterion ${index + 1}`}
+        disabled={disabled || !canRemove}
+        onClick={onRemove}
+        className="mt-0.5 shrink-0 rounded p-0.5 text-muted-foreground opacity-60 transition hover:bg-muted hover:text-foreground group-hover:opacity-100 disabled:hidden"
+      >
+        <X className="h-4 w-4" />
+      </button>
+    </div>
+  );
+}
 
 export function HandoverDialog({
   open,
@@ -119,7 +179,7 @@ export function HandoverDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !busy && onOpenChange(o)}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-xl">
             Hand this job to Autopilot?
@@ -193,43 +253,33 @@ export function HandoverDialog({
           {criteria && (
             <div className="space-y-1.5">
               {criteria.map((c, i) => (
-                <div key={i} className="flex items-center gap-1.5">
-                  <span className="w-4 shrink-0 text-xs text-muted-foreground">
-                    {i + 1}.
-                  </span>
-                  <Input
-                    value={c}
-                    disabled={busy}
-                    onChange={(e) =>
-                      setCriteria(
-                        criteria.map((x, j) => (j === i ? e.target.value : x)),
-                      )
-                    }
-                    className="h-8 text-sm"
-                  />
-                  <button
-                    aria-label="Remove criterion"
-                    disabled={busy || criteria.length <= 1}
-                    onClick={() =>
-                      setCriteria(criteria.filter((_, j) => j !== i))
-                    }
-                    className="text-muted-foreground hover:text-foreground disabled:opacity-30"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
+                <CriterionRow
+                  key={i}
+                  index={i}
+                  value={c}
+                  disabled={busy}
+                  canRemove={criteria.length > 1}
+                  autoFocus={c === "" && i === criteria.length - 1}
+                  onChange={(v) =>
+                    setCriteria(criteria.map((x, j) => (j === i ? v : x)))
+                  }
+                  onRemove={() =>
+                    setCriteria(criteria.filter((_, j) => j !== i))
+                  }
+                />
               ))}
               {criteria.length < 10 && (
                 <button
                   disabled={busy}
                   onClick={() => setCriteria([...criteria, ""])}
-                  className="flex items-center gap-1 text-xs text-primary hover:underline"
+                  className="flex w-full items-center justify-center gap-1 rounded-lg border border-dashed border-border/70 py-2 text-xs text-muted-foreground transition hover:border-amber-500/50 hover:text-foreground"
                 >
                   <Plus className="h-3.5 w-3.5" /> Add a criterion
                 </button>
               )}
               <p className="text-xs text-muted-foreground">
-                Freelancers see these on the job before they apply.
+                Click any criterion to edit it. Freelancers see these on the job
+                before they apply.
               </p>
             </div>
           )}
