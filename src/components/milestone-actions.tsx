@@ -23,7 +23,10 @@ import {
   Gavel,
   Play,
   XCircle,
+  Paperclip,
+  X,
 } from "lucide-react";
+import { isApiConfigured, uploadMilestoneFile } from "@/lib/api";
 import type { Milestone } from "@/lib/web3/types";
 import { ContractService } from "@/lib/web3/contract-service";
 import {
@@ -77,6 +80,10 @@ export function MilestoneActions({
   >(null);
   const [disputeReason, setDisputeReason] = useState("");
   const [resubmitMessage, setResubmitMessage] = useState("");
+  // Optional file sent with a resubmission, uploaded first and linked in the
+  // submission text (the same format the Freelancer page uses, which is also
+  // how Autopilot finds the work to review).
+  const [resubmitFile, setResubmitFile] = useState<File | null>(null);
 
   // Helper functions
   // While Autopilot runs the job it approves and rejects; the client keeps
@@ -184,14 +191,33 @@ export function MilestoneActions({
             disputer: disputerAddress,
           });
           break;
-        case "resubmit":
+        case "resubmit": {
+          let description = resubmitMessage || milestone.description;
+          if (resubmitFile) {
+            if (!isApiConfigured()) {
+              throw new Error("File uploads need the SecureFlow API");
+            }
+            toast({
+              title: "Uploading attachment…",
+              description: resubmitFile.name,
+            });
+            const uploaded = await uploadMilestoneFile(
+              resubmitFile,
+              escrowId,
+              milestoneIndex,
+            );
+            description =
+              `${description}\n\n[Attachment: ${uploaded.filename}](${uploaded.url})`.trim();
+          }
           txHash = await service.resubmitMilestone({
             escrow_id: Number(escrowId),
             milestone_index: milestoneIndex,
-            description: resubmitMessage || milestone.description,
+            description,
             beneficiary: wallet.address || "",
           });
+          setResubmitFile(null);
           break;
+        }
       }
 
       if (txHash) {
@@ -587,7 +613,13 @@ export function MilestoneActions({
       </div>
 
       {/* Confirmation Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog
+        open={dialogOpen}
+        onOpenChange={(open) => {
+          setDialogOpen(open);
+          if (!open) setResubmitFile(null);
+        }}
+      >
         <DialogContent className="glass max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <div className="flex items-center gap-3 mb-2">
@@ -688,6 +720,56 @@ export function MilestoneActions({
                   resubmission.
                 </p>
               </div>
+              {isApiConfigured() && (
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    Attach file{" "}
+                    <span className="font-normal text-muted-foreground">
+                      (optional · PDF, images, docs, zip · max 10 MB)
+                    </span>
+                  </label>
+                  {resubmitFile ? (
+                    <div className="flex items-center gap-2 rounded-md border border-primary/40 bg-primary/5 px-3 py-2 text-sm">
+                      <Paperclip className="h-4 w-4 shrink-0 text-primary" />
+                      <span className="flex-1 truncate">
+                        {resubmitFile.name}
+                      </span>
+                      <button
+                        type="button"
+                        aria-label="Remove attachment"
+                        className="text-muted-foreground hover:text-foreground"
+                        onClick={() => setResubmitFile(null)}
+                        disabled={isLoading}
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <label className="flex cursor-pointer items-center gap-2 rounded-md border-2 border-dashed border-muted-foreground/25 px-3 py-2.5 text-sm text-muted-foreground transition-colors hover:border-primary/50">
+                      <input
+                        type="file"
+                        className="sr-only"
+                        accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.txt,.md,.zip,.doc,.docx"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (!f) return;
+                          if (f.size > 10 * 1024 * 1024) {
+                            toast({
+                              title: "File too large",
+                              description: "Attachments can be up to 10 MB.",
+                              variant: "destructive",
+                            });
+                            return;
+                          }
+                          setResubmitFile(f);
+                        }}
+                      />
+                      <Paperclip className="h-4 w-4 shrink-0" />
+                      Click to attach your work
+                    </label>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
