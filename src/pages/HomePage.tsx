@@ -39,43 +39,21 @@ export default function HomePage() {
       const { ContractService } = await import("@/lib/web3/contract-service");
       const contractService = new ContractService(CONTRACTS.SECUREFLOW_ESCROW);
 
-      // Get next escrow ID from blockchain (not hardcoded)
-      const nextEscrowId = await contractService.getNextEscrowId();
+      // Every escrow, read in batches of 50. This used to stop at #20, so
+      // the totals undercounted as soon as the platform grew past it.
+      const total = await contractService.getTotalEscrows();
+      const ids = Array.from({ length: total }, (_, i) => i + 1);
+      const escrows = await contractService.getEscrowsBatch(ids);
 
       let activeEscrows = 0;
       let completedEscrows = 0;
       let totalVolume = 0;
-
-      // Fetch all escrows from the contract to calculate stats
-      // Check up to 20 escrows (reasonable limit)
-      const maxEscrowsToCheck = Math.min(nextEscrowId - 1, 20);
-      for (let i = 1; i <= maxEscrowsToCheck; i++) {
-        try {
-          const escrowData = await contractService.getEscrow(i);
-
-          if (!escrowData) {
-            continue;
-          }
-
-          // Get status and total amount
-          const status = escrowData.status || 0;
-          const totalAmount = Number(escrowData.amount || "0");
-
-          // Add to total volume (convert from stroops to XLM - 7 decimals)
-          totalVolume += totalAmount / 1e7;
-
-          // EscrowStatus enum: Pending=0, InProgress=1, Released=2, Refunded=3, Disputed=4, Expired=5
-          if (status === 1) {
-            // InProgress - Active escrow
-            activeEscrows++;
-          } else if (status === 2) {
-            // Released - Completed
-            completedEscrows++;
-          }
-        } catch (error) {
-          // Skip escrows that don't exist
-          continue;
-        }
+      for (const escrow of escrows) {
+        // Amounts are in stroops (7 decimals).
+        totalVolume += Number(escrow.amount || "0") / 1e7;
+        // ESCROW_STATUS_NUMBER: 1 in progress, 2 released
+        if (escrow.status === 1) activeEscrows++;
+        else if (escrow.status === 2) completedEscrows++;
       }
 
       setStats({

@@ -1837,9 +1837,12 @@ export class ContractService {
       const native = scValToNative(rv) as any;
       return Number(native ?? 0);
     } catch {
-      // Backward compatibility for older deployments: infer from next_escrow_id
-      const next = await this.getNextEscrowId();
-      return Math.max(0, Number(next) - 1);
+      // Older deployments only exposed next_escrow_id. Ask the contract for it
+      // directly: falling back to getNextEscrowId() here made the two methods
+      // call each other forever whenever the contract didn't answer (a stale
+      // contract ID left the dashboard spinning with an endless RPC loop).
+      const rv = await this.simulateReadonly("get_next_escrow_id");
+      return Math.max(0, Number(scValToNative(rv) ?? 1) - 1);
     }
   }
 

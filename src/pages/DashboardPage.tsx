@@ -196,8 +196,15 @@ export default function DashboardPage() {
       const { ContractService } = await import("@/lib/web3/contract-service");
       const contractService = new ContractService(CONTRACTS.SECUREFLOW_ESCROW);
 
-      // Get next escrow ID from blockchain (not hardcoded)
-      const nextEscrowId = await contractService.getNextEscrowId();
+      // Only the escrows this wallet is part of, from the contract's own
+      // per-user index. This used to probe ids 1-20 one call at a time, which
+      // was slow and silently hid every job past #20. A contract that doesn't
+      // answer throws here, so the page shows an error instead of spinning.
+      const myEscrowIds = [
+        ...new Set(
+          (await contractService.getUserEscrows(wallet.address)).map(Number),
+        ),
+      ];
 
       const userEscrows: Escrow[] = [];
 
@@ -216,10 +223,7 @@ export default function DashboardPage() {
         currentLedger = Math.floor(Date.now() / 1000 / SECONDS_PER_LEDGER);
       }
 
-      // Fetch user's escrows from the contract
-      // Check if there are any escrows created yet (nextEscrowId > 1 means at least one escrow exists)
-      const maxEscrowsToCheck = Math.min(nextEscrowId - 1, 20);
-      for (let i = 1; i <= maxEscrowsToCheck; i++) {
+      for (const i of myEscrowIds) {
         try {
           const escrowData = await contractService.getEscrow(i);
 
