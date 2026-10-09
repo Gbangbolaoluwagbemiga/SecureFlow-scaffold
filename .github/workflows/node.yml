@@ -8,46 +8,113 @@ on:
 env:
   CARGO_TERM_COLOR: always
   PKG_CONFIG_PATH: /usr/lib/pkgconfig
-  PUBLIC_STELLAR_NETWORK: local
+
+# Each job checks one part of the system and needs nothing from the others,
+# so one outage cannot fail the whole build. The local-network job pulls a
+# large image from Docker Hub, whose anonymous rate limit GitHub's shared
+# runners hit regularly; it is kept as a smoke test but is not allowed to
+# block a merge on an outage that has nothing to do with the code.
 
 jobs:
-  build:
+  app:
+    name: Frontend (lint, format, build)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/cache@v3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npx prettier . --check
+      - run: npm run install:contracts
+      - run: npm run build
+      - name: Run tests
+        run: npm test --if-present
+
+  backend:
+    name: Backend (typecheck)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - run: npx tsc --noEmit -p .
+
+  contract:
+    name: Contract (test, clippy, wasm)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
         with:
           path: |
-            ~/.cargo/bin/
-            runner/.cargo/bin/
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
+      - run: rustup show active-toolchain || rustup toolchain install
       - run: rustup target add wasm32v1-none
+      - run: rustup component add clippy
+      - name: Unit tests
+        run: cargo test -p secureflow
+      - name: Clippy
+        run: cargo clippy -p secureflow --all-targets -- -D warnings
+      - name: Build wasm
+        run: cargo build -p secureflow --target wasm32v1-none --release
+
+  local-network:
+    name: Scaffold on a local network (smoke test)
+    runs-on: ubuntu-latest
+    # Docker Hub outages and rate limits are not code failures.
+    continue-on-error: true
+    env:
+      PUBLIC_STELLAR_NETWORK: local
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-scaffold-${{ hashFiles('**/Cargo.lock') }}
+      - run: rustup target add wasm32v1-none
+      # Authenticated pulls get a far higher rate limit. Optional: add
+      # DOCKERHUB_USERNAME and DOCKERHUB_TOKEN as repository secrets.
+      - name: Log in to Docker Hub
+        if: ${{ env.DOCKERHUB_USERNAME != '' }}
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
       - name: Start Stellar Quickstart
         uses: stellar/quickstart@main
         with:
           tag: testing
           network: local
       - run: sudo apt-get update && sudo apt-get install -y libudev-dev libdbus-1-dev pkg-config
-      - name: Install cargo-binstall
-        uses: cargo-bins/cargo-binstall@v1.15.6
-      - name: Check for stellar-scaffold binary
-        run: |
-          if ! command -v stellar-scaffold &> /dev/null; then
-            echo "stellar-scaffold not found, installing..."
-            cargo binstall stellar-scaffold-cli
-          else
-            echo "stellar-scaffold already installed. Clear cache to force reinstall."
-          fi
+      - uses: cargo-bins/cargo-binstall@v1.15.6
+      - name: Install stellar-scaffold
+        run: command -v stellar-scaffold || cargo binstall -y stellar-scaffold-cli
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
       - run: npm ci
-      - run: npm run lint
-      - run: npx prettier . --check
-      - name: Build clients before building the project
+      - name: Deploy contracts and build clients
         run: STELLAR_SCAFFOLD_ENV=development stellar-scaffold build --build-clients
       - run: npm run install:contracts
       - run: npm run build
-      - name: Run tests
-        run: npm test --if-present

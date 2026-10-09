@@ -1,648 +1,379 @@
-# SecureFlow
-
 <div align="center">
 
-**A decentralized freelancer marketplace built on Stellar (Soroban) that provides secure, trustless escrow services for freelance work agreements.**
+<img src="public/secureflow-mark.svg" alt="SecureFlow" height="72" />
 
-[![Stellar](https://img.shields.io/badge/Stellar-Soroban-7D00FF?style=flat-square&logo=stellar)](https://stellar.org)
-[![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![React](https://img.shields.io/badge/React-20232A?style=flat-square&logo=react&logoColor=61DAFB)](https://reactjs.org/)
-[![Rust](https://img.shields.io/badge/Rust-000000?style=flat-square&logo=rust&logoColor=white)](https://www.rust-lang.org/)
+# SecureFlow
+
+**Milestone escrow for freelance work on Stellar, with an AI job manager and verified freelancers.**
+
+Clients lock the budget in a Soroban contract before work starts. Freelancers are paid per milestone the moment it's approved. Disputes go to arbiters who split the money on-chain. A client can hand the whole job to **Autopilot**, which hires, reviews and escalates for them.
+
+[![Build and Test](https://github.com/Gbangbolaoluwagbemiga/SecureFlow-scaffold/actions/workflows/node.yml/badge.svg)](https://github.com/Gbangbolaoluwagbemiga/SecureFlow-scaffold/actions/workflows/node.yml)
+[![Stellar Soroban](https://img.shields.io/badge/Stellar-Soroban-7D00FF?style=flat-square&logo=stellar)](https://developers.stellar.org/docs/build/smart-contracts/overview)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue?style=flat-square)](LICENSE)
+
+**[Live app (testnet)](https://secureflow-testnet.vercel.app/)** · **[Contract on Stellar Expert](https://stellar.expert/explorer/testnet/contract/CAJAUKTFKRYZCIFCQOGNZJMCJITC574Z5DUFRINMXXR7VIYKRBEFPS7H)**
+
+🏆 Winner, Scaffold Stellar Hackathon 2025
 
 </div>
 
 ---
 
-## Table of Contents
+## Contents
 
-- [Overview](#overview)
-- [Features](#features)
-- [How It Works](#how-it-works)
+- [What it does](#what-it-does)
+- [Autopilot: the AI job manager](#autopilot-the-ai-job-manager)
+- [Verified freelancers](#verified-freelancers)
 - [Architecture](#architecture)
-- [Smart Contract Details](#smart-contract-details)
-- [Tech Stack](#tech-stack)
-- [Getting Started](#getting-started)
-- [Usage Guide](#usage-guide)
-- [Deployment](#deployment)
-- [Security](#security)
-- [Project Structure](#project-structure)
+- [Deployed contract](#deployed-contract)
+- [Run it locally](#run-it-locally)
+- [Configuration](#configuration)
+- [Deploying to production](#deploying-to-production)
+- [Contract reference](#contract-reference)
+- [Backend API](#backend-api)
+- [Testing](#testing)
+- [Security model](#security-model)
+- [Project structure](#project-structure)
 - [Contributing](#contributing)
-- [License](#license)
 
 ---
 
-## Overview
+## What it does
 
-SecureFlow is a blockchain-powered freelancer marketplace that enables clients and freelancers to collaborate without requiring trust between parties. Built on the Stellar network using Soroban smart contracts, SecureFlow ensures secure milestone-based payments, transparent dispute resolution, and on-chain reputation — all enforced by code, not intermediaries.
+### For clients
 
-### Why SecureFlow?
+- **Post a job, funded up front.** The budget and up to 20 milestones are locked in the contract when the job is posted. A platform fee (currently 1%, capped at 10% by the contract) is charged on top and held until the job settles.
+- **Hire from applicants, or name a freelancer directly.** Applicants show their cover letter, timeline, rating, badge and a **Verified** tag if they've confirmed their identity.
+- **Approve, reject with a reason, or dispute** each milestone. Approving pays the freelancer immediately.
+- **Change your mind before work starts:** add or withdraw funds per milestone, edit milestones, or cancel. Cancelling refunds the budget and the whole held fee, minus a small penalty only if people applied (5% for 1–5 applicants, 10% for 6–10, 15% above), which compensates for their wasted time.
+- **Hand the job to Autopilot** and let it run hiring and reviews (see below).
 
-- **Trustless Escrow** — Funds are locked in smart contracts until work is verified and approved
-- **Fast & Low-Cost** — Leverages Stellar's 3–5 second finality and near-zero fees
-- **Global Access** — Works with native XLM and any whitelisted token
-- **Fair Disputes** — Per-milestone multi-sig arbiter voting with configurable quorum
-- **On-Chain Reputation** — Build trust through verifiable, tamper-proof reputation scores
-- **Gasless Applications** — Freelancers can apply to jobs without holding XLM for fees
+### For freelancers
 
----
+- **Browse open jobs and apply without holding XLM.** Applications are fee-bumped by the platform.
+- **Track every application** and what became of it, in a dedicated tab, with live updates.
+- **Get notified** when you're hired, when a job you applied to is filled or cancelled, and on every milestone decision.
+- **Submit and resubmit work** with attachments; rejected work comes back with the reason.
+- **Propose a scope change** to a milestone; the client accepts or rejects it.
+- **Decline an assignment** before starting, so the client can reopen the job.
+- **Verify your identity** once with Didit to earn the Verified tag and an edge with Autopilot.
 
-## Features
+### Disputes and safety nets
 
-### Core Escrow
+- **Arbiter panels.** A job can carry its own panel of up to 5 arbiters and a quorum; otherwise the protocol's authorised arbiters rule. Arbiters vote on a split per disputed milestone (freelancer amount + client amount), and the payout executes once quorum is reached.
+- **Evidence on record.** Either party can attach IPFS evidence to a milestone before an arbiter rules.
+- **Deadlines.** Clients can extend a deadline; either side can raise an overdue dispute; after the deadline plus a 30-day grace period, an emergency refund path opens.
+- **Reopen after arbitration.** Paid work stays paid; untouched milestones can be withdrawn, or the job reopened for someone else.
 
-| Feature                  | Description                                                                                               |
-| ------------------------ | --------------------------------------------------------------------------------------------------------- |
-| Smart contract escrow    | Funds locked until milestones approved                                                                    |
-| Milestone-based payments | Each milestone paid independently upon approval                                                           |
-| Open job marketplace     | Anyone can apply; client selects the best candidate                                                       |
-| Direct contracts         | Create with a known freelancer — no application needed                                                    |
-| Tiered cancellation      | Cancel an unstarted job with a tiered penalty (0–30%) based on cancellation history and application count |
-| Dynamic fund management  | Add or withdraw funds from specific milestones before work starts                                         |
-| Deadline extension       | Depositor can extend the project deadline                                                                 |
-| Emergency refund         | Automatic refund path after deadline expiration                                                           |
+### Reputation
 
-### Milestone System
-
-| Feature                 | Description                                                                  |
-| ----------------------- | ---------------------------------------------------------------------------- |
-| Add / remove milestones | Depositor can add or remove milestones before work starts                    |
-| Milestone submission    | Freelancer submits work with an updated description                          |
-| Resubmission            | Freelancer can resubmit a rejected milestone                                 |
-| Approve / reject        | Client approves (pays out) or rejects (with reason) each milestone           |
-| Dispute milestone       | Either party can dispute; routes to arbiters                                 |
-| Milestone negotiation   | Freelancer proposes an amount/description change; client approves or rejects |
-| On-chain evidence       | Either party can attach IPFS CIDs as evidence before an arbiter rules        |
-
-### Dispute Resolution
-
-| Feature                 | Description                                                                          |
-| ----------------------- | ------------------------------------------------------------------------------------ |
-| Per-milestone multi-sig | Arbiters cast votes per disputed milestone                                           |
-| Configurable quorum     | `required_confirmations` set at escrow creation                                      |
-| Split payouts           | Arbiter specifies exact freelancer and client amounts (must sum to milestone amount) |
-| Vote tracking           | `get_dispute_vote_count` and `has_dispute_voted` prevent double-voting               |
-| Overdue disputes        | Either party can raise a dispute after the deadline                                  |
-| Arbiter award / refund  | Arbiters can award the freelancer a partial amount or approve a full client refund   |
-
-### Reputation & Ratings
-
-| Feature                    | Description                                                             |
-| -------------------------- | ----------------------------------------------------------------------- |
-| On-chain reputation        | Score increases with approved milestones                                |
-| Client → freelancer rating | 1–5 stars + written review after project completion                     |
-| Freelancer → client rating | Freelancers can rate clients too                                        |
-| Average ratings            | Per-address average rating and count                                    |
-| Badge tiers                | Beginner → Intermediate → Advanced → Expert based on completed projects |
-
-### Platform Administration
-
-| Feature              | Description                                                 |
-| -------------------- | ----------------------------------------------------------- |
-| Emergency pause      | Owner can pause all write operations instantly              |
-| Job creation pause   | Pause new job creation without affecting active escrows     |
-| Token whitelisting   | Only approved tokens accepted                               |
-| Token blacklisting   | Ban a previously whitelisted token                          |
-| Arbiter management   | Authorize or revoke arbiters                                |
-| Platform fee control | Configurable fee in basis points (max 10%)                  |
-| Fee withdrawal       | Fee collector withdraws accumulated fees per token          |
-| Delete escrow        | Owner can delete terminal escrows with zero remaining funds |
-| Stuck fund recovery  | Owner withdraws excess balance above all escrowed amounts   |
-
-### Developer Features
-
-| Feature                  | Description                                                         |
-| ------------------------ | ------------------------------------------------------------------- |
-| Gasless job applications | Backend fee-bump wraps user's signed XDR — applicants need zero XLM |
-| Paginated applications   | `get_applications_page(offset, limit)` for scalable UIs             |
-| Application count        | `get_application_count` for pagination headers                      |
-| User escrow index        | Per-address list of escrow IDs for fast dashboards                  |
-| WASM size                | 59 KB (well under the 64 KB Soroban limit)                          |
+Ratings in both directions (client rates freelancer, freelancer rates client), completed-job counts, reputation scores and badge tiers, all on-chain.
 
 ---
 
-## How It Works
+## Autopilot: the AI job manager
 
-```
-Create Job → Apply / Accept → Start Work → Submit Milestones → Approve / Dispute → Payment
-```
+A client can hand any open or in-progress job to Autopilot. It's an ordinary Stellar account appointed with `set_job_manager`, and the contract restricts what it can do: it may **hire, approve, reject and dispute** on that one job, and it can **never cancel, move funds or be paid**. The client can take the job back at any moment with `revoke_job_manager`.
 
-### 1. Job Creation
+**How a hand-over works**
 
-The client deposits funds into the escrow contract and defines:
+1. Autopilot reads the job and writes **4–7 checkable acceptance criteria**. The client sees them, can edit them, and picks how long applications stay open (15 minutes to 3 days). If the title and description ask for different things, the dialog says so.
+2. The client **signs** the criteria and window with their wallet (SEP-53 signed message). The server checks the signature against the job's depositor, so nobody else (least of all a freelancer hoping for an easy bar) can set the criteria for someone else's job.
+3. The client appoints Autopilot on-chain.
 
-- Project title, description, and deadline
-- Milestones (amount + description per milestone); amounts must sum to `total_amount - platform_fee`
-- Payment token (native XLM or whitelisted token)
-- Optional: a specific beneficiary (direct contract) or leave open for applications
-- Arbiters list and required confirmation count for dispute resolution
+**What it does next**
 
-Funds are transferred from the client to the contract at creation time.
+- **Hiring.** When the window closes it scores every applicant side by side out of 100: capability (50, from their portfolio link or the letter's specifics), brief fit (30), timeline (15) and history (5, never a penalty for newcomers). **Identity-verified freelancers get a fixed +10 edge**, and win ties. It hires the best applicant scoring 60 or more; if nobody does, the job stays open and new applicants are scored as they arrive.
+- **Reviewing.** Each delivery is judged against the criteria that apply to _that_ milestone. Autopilot opens the delivered link or attachment and judges what is actually there, not what the freelancer says about it. A delivery with nothing attached is rejected at 0. Approving pays out; rejecting sends back exactly what to fix and what to keep.
+- **Escalating.** After **3 failed attempts on a milestone**, it opens a dispute and a human arbiter decides.
 
-### 2. Application & Selection (open jobs)
+Every decision is logged with its reasoning and transaction link, visible to the client as it happens. The freelancer is notified when Autopilot takes over, sees an **Autopilot in charge** badge, and sees the criteria on the job before applying.
 
-Freelancers browse open jobs, submit a cover letter and proposed timeline. Applications are stored on-chain. The client reviews and calls `accept_freelancer`. Gasless application support means applicants do not need XLM for fees.
+Autopilot runs on xAI **Grok** when `XAI_API_KEY` is set and falls back to **Groq**. Anything a stranger wrote (job text, cover letters, portfolio pages, submissions) is passed to the model as untrusted data, and links are fetched with a guard that refuses private and loopback addresses.
 
-### 3. Work Start
+---
 
-The assigned freelancer calls `start_work`. The escrow status moves from `Pending` → `InProgress` and the fee portion is earmarked at this point.
+## Verified freelancers
 
-### 4. Milestone Submission
+Freelancers can verify their identity once with [Didit](https://didit.me) (ID document + liveness). On approval, the backend's verifier key attests the wallet on-chain:
 
-For each milestone the freelancer submits via `submit_milestone` (or `resubmit_milestone` after rejection). The milestone status becomes `Submitted`.
+- **No personal data on-chain.** The contract stores only a salted HMAC of the person's normalised identity, which cannot be reversed.
+- **Sybil-resistant.** One person can verify one wallet. The same identity on a second wallet is refused by the contract (`DuplicateIdentity`).
+- **Visible to clients.** A Verified tag appears on applications, job cards and the dashboard, and Autopilot ranks verified applicants higher.
 
-### 5. Review (Approve / Reject / Dispute)
-
-**Approve** → payment released immediately to freelancer, milestone marked `Approved`.
-
-**Reject** → milestone reverts to allow resubmission; rejection reason stored on-chain.
-
-**Dispute** → milestone marked `Disputed`. Either party can attach IPFS evidence via `submit_evidence`. Authorized arbiters then call `resolve_dispute`.
-
-### 6. Dispute Resolution (per milestone)
-
-Each arbiter calls `resolve_dispute(escrow_id, milestone_index, arbiter, freelancer_amount, client_amount, reason)`. Votes are tracked idempotently. When the vote count reaches `required_confirmations`, the contract:
-
-1. Transfers `freelancer_amount` to the beneficiary
-2. Transfers `client_amount` to the depositor
-3. Marks the milestone `Resolved`
-4. Resets the vote count to 0
-5. Updates escrow status to `Released` or `InProgress` based on remaining balance
-
-### 7. Cancellation
-
-A depositor can cancel an unstarted (no freelancer assigned) job. The penalty scales with repeat cancellations and the number of applicants who invested time:
-
-| Cancellations | Base penalty |
-| ------------- | ------------ |
-| 0 – 2         | 0%           |
-| 3 – 5         | 5%           |
-| 6 – 10        | 10%          |
-| 11+           | 15%          |
-
-An additional 0–15% may apply based on application count. Total penalty is capped at 30% and the penalty decays over ~30 days (518,400 ledgers) of inactivity.
-
-### 8. Milestone Negotiation
-
-If scope or budget changes after work starts, the freelancer can call `propose_milestone_change` with a new amount and description. The client then calls `approve_milestone_proposal` (applies the change) or `reject_milestone_proposal` (reverts).
+Results arrive by signed webhook (`X-Signature-V2`, timestamp checked within 5 minutes), with a fallback that polls Didit's decision API if no webhook arrives.
 
 ---
 
 ## Architecture
 
-### Smart Contract Modules
-
 ```
-contracts/secureflow/src/
-├── lib.rs                  Public contract interface — all entrypoints
-├── storage_types.rs        Enums, structs, DataKey variants, error codes
-├── escrow_core.rs          Storage helpers, token transfers, whitelist checks
-├── escrow_management.rs    create_escrow, add/remove milestones, cancel, fund mgmt
-├── work_lifecycle.rs       start_work, submit/approve/reject/dispute milestone,
-│                           milestone negotiation, per-milestone resolve_dispute
-├── refund_system.rs        refund_escrow, emergency refund, deadline extension,
-│                           overdue disputes, arbiter award/refund
-├── marketplace.rs          apply_to_job, accept_freelancer, paginated apps
-├── ratings.rs              submit_rating, get_average_rating, badges, client ratings
-├── evidence.rs             submit_evidence, get_evidence
-└── admin.rs                owner controls, pause, blacklist, fee withdrawal, delete_escrow
+┌──────────────────────────┐      wallet-signed txs       ┌────────────────────────────┐
+│  Frontend (React + Vite) │ ───────────────────────────▶ │  SecureFlow contract       │
+│  Vercel                  │ ◀─── reads, events (RPC) ─── │  Soroban, Stellar testnet  │
+└────────────┬─────────────┘                              └─────────────▲──────────────┘
+             │ REST                                                     │ fee-bump, attest,
+             ▼                                                          │ Autopilot actions
+┌──────────────────────────┐                                            │
+│  Backend (Express)       │ ───────────────────────────────────────────┘
+│  Railway                 │ ──▶ Supabase (notifications, messages, applications, files)
+│                          │ ──▶ Didit (identity)      ──▶ Grok / Groq (AI)
+│                          │ ──▶ Pinata (IPFS evidence)
+└──────────────────────────┘
 ```
 
-### Escrow Lifecycle
+| Layer    | Stack                                                                                                                   |
+| -------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Contract | Rust, soroban-sdk 23, custom error codes (no panics), checked arithmetic, upgradeable in place                          |
+| Frontend | React 19, Vite, TypeScript, Tailwind, Radix UI, Stellar Wallets Kit (Freighter, xBull, Lobstr, Albedo, Hana and others) |
+| Backend  | Node 22, Express, @stellar/stellar-sdk, Supabase, Didit v3, Grok/Groq                                                   |
+| Data     | Contract indexes for open jobs and per-freelancer applications, batch reads of up to 50 escrows per call                |
 
-```
-Pending → InProgress → Released
-                    ↘ Refunded
-                    ↘ Disputed
-                    ↘ Expired
-                    ↘ Cancelled
-```
-
-### Milestone Lifecycle
-
-```
-NotStarted → Submitted → Approved
-           ↘ Rejected  (freelancer resubmits)
-           ↘ Disputed  → Resolved
-ProposalPending (negotiation in progress)
-```
-
-### Frontend Architecture
-
-```
-React 19 + TypeScript
-    └── Web3Context           wallet connection, high-level contract calls
-         └── ContractService  simulate-readonly / sendOwnerTransaction helpers
-              └── Stellar SDK  Transaction building, auth entry signing, RPC
-                   └── Soroban RPC  Testnet / mainnet
-```
+Notifications come from contract events: the frontend indexes them from RPC and notifies each wallet of what concerns it, with per-wallet de-duplication.
 
 ---
 
-## Smart Contract Details
+## Deployed contract
 
-### Deployed Contract (Testnet)
+| Network         | Contract ID                                                | Version         |
+| --------------- | ---------------------------------------------------------- | --------------- |
+| Stellar testnet | `CAJAUKTFKRYZCIFCQOGNZJMCJITC574Z5DUFRINMXXR7VIYKRBEFPS7H` | `2.2.0-indexes` |
 
-| Key                   | Value                                                              |
-| --------------------- | ------------------------------------------------------------------ |
-| Contract ID           | `CBWMVACS6BVU55SQOSU2YLE6PL4J6COXJAWZZLTVFRE4E7UYOW4DX5KQ`         |
-| WASM hash             | `972dcf84f8a673d0063202ebc725cf16f1147ba9ff2c83de6541d1e1b4defb98` |
-| Network               | Test SDF Network ; September 2015                                  |
-| Platform fee          | 250 bp (2.5%)                                                      |
-| Owner / fee-collector | `GBL5ZXODI2UVOTTLNJGCJ2N52MO4XEUQB6TMXOEZIAVPGLBPWOJ6HDEE`         |
-
-> **Note:** Stellar testnet resets periodically wipe all contracts. After a reset, rebuild the WASM (`stellar contract build`), upload it, deploy, and call `initialize` once. Update `VITE_SECUREFLOW_CONTRACT_ID` in `.env` to the new contract ID.
-
-### Fee Model
-
-SecureFlow uses an **embedded fee** model. The `total_amount` deposited at creation already includes the platform fee:
-
-```
-platform_fee = total_amount × platform_fee_bp / 10_000
-net_to_milestones = total_amount - platform_fee
-sum(milestone.amounts) == net_to_milestones
-```
-
-The fee is earmarked (not transferred) at `start_work` and collected by the fee collector via `withdraw_fees`.
-
-### Key Contract Functions
-
-```rust
-// Lifecycle
-create_escrow(depositor, beneficiary?, arbiters, required_confirmations,
-              milestones: Vec<(i128, String)>, token?, total_amount, duration,
-              project_title, project_description) → u32  // returns escrow_id
-
-start_work(escrow_id, beneficiary)
-submit_milestone(escrow_id, milestone_index, description, beneficiary)
-resubmit_milestone(escrow_id, milestone_index, description, beneficiary)
-approve_milestone(escrow_id, milestone_index, depositor)
-reject_milestone(escrow_id, milestone_index, reason, depositor)
-dispute_milestone(escrow_id, milestone_index, reason, disputer)
-
-// Cancellation & funds
-cancel_job(escrow_id, depositor)
-add_job_funds(escrow_id, depositor, additional_amount, milestone_index)
-withdraw_job_funds(escrow_id, depositor, withdraw_amount, milestone_index)
-
-// Milestone negotiation
-propose_milestone_change(escrow_id, milestone_index, proposed_amount, proposed_description, freelancer)
-approve_milestone_proposal(escrow_id, milestone_index, depositor)
-reject_milestone_proposal(escrow_id, milestone_index, depositor)
-
-// Dispute resolution
-resolve_dispute(escrow_id, milestone_index, arbiter, freelancer_amount, client_amount, reason)
-submit_evidence(escrow_id, milestone_index, submitter, cid)
-
-// Marketplace
-apply_to_job(escrow_id, cover_letter, proposed_timeline, freelancer)
-accept_freelancer(escrow_id, freelancer, depositor)
-get_applications_page(escrow_id, offset, limit)
-get_application_count(escrow_id)
-
-// Refunds
-refund_escrow(escrow_id, depositor)
-emergency_refund_after_deadline(escrow_id, depositor)
-extend_deadline(escrow_id, extra_seconds, depositor)
-raise_overdue_dispute(escrow_id, requester, reason)
-arbiter_approve_refund(escrow_id, arbiter)
-arbiter_award_freelancer(escrow_id, arbiter, freelancer_amount)
-
-// Ratings
-submit_rating(escrow_id, rating, review, client)
-submit_client_rating(escrow_id, rating, review, freelancer)
-get_average_rating(freelancer) → (total, count)
-get_badge(freelancer) → Badge
-get_average_client_rating(client) → (total, count)
-
-// Admin
-initialize(owner, fee_collector, platform_fee_bp, default_whitelisted_tokens)
-pause_contract() / unpause_contract()
-pause_job_creation() / unpause_job_creation()
-blacklist_token(token) / unblacklist_token(token)
-whitelist_token(token)
-authorize_arbiter(arbiter) / remove_arbiter(arbiter)
-set_platform_fee_bp(fee_bp)
-set_fee_collector(fee_collector)
-set_owner(new_owner)
-get_withdrawable_fees(token?) → i128
-withdraw_fees(token?, caller)
-withdraw_stuck_funds(token, to, amount)
-delete_escrow(escrow_id)
-```
-
-### Error Codes
-
-| Code | Name                             | Meaning                                                |
-| ---- | -------------------------------- | ------------------------------------------------------ |
-| 1    | `AlreadyInitialized`             | `initialize` called twice                              |
-| 100  | `EscrowNotFound`                 | Invalid escrow ID                                      |
-| 200  | `Unauthorized`                   | Caller not authorized                                  |
-| 300  | `InvalidAmount`                  | Amount ≤ 0 or exceeds bounds                           |
-| 400  | `InvalidStatus`                  | Operation not valid for current status                 |
-| 500  | `MilestoneNotFound`              | Invalid milestone index                                |
-| 600  | `TokenNotWhitelisted`            | Token not allowed                                      |
-| 700  | `InsufficientFunds`              | Contract balance too low                               |
-| 800  | `FeeTooHigh`                     | Fee exceeds 10%                                        |
-| 900  | `AlreadyApplied`                 | Freelancer already applied                             |
-| 1000 | `NotApplied`                     | Freelancer hasn't applied                              |
-| 1100 | `FreelancerAlreadyAssigned`      | Cannot reassign once started                           |
-| 1200 | `DeadlineNotPassed`              | Too early for emergency refund                         |
-| 1300 | `ContractIsPaused`               | Emergency pause active                                 |
-| 1400 | `AlreadyBlacklisted`             | Token already blacklisted                              |
-| 1500 | `NothingToRefund`                | Fee balance is zero                                    |
-| 1600 | `InsufficientWithdrawable`       | Stuck-fund withdrawal exceeds excess                   |
-| 1700 | `NotInitialized`                 | Contract not yet initialized                           |
-| 1800 | `AlreadyVoted`                   | Arbiter already voted on this dispute                  |
-| 1900 | `InvalidVoteSplit`               | `freelancer_amount + client_amount ≠ milestone.amount` |
-| 2000 | `NoPendingProposal` (prev. 2400) | No proposal pending to approve/reject                  |
-| 2100 | `FundsStillLocked`               | Escrow has remaining balance, cannot delete            |
-| 2200 | `EscrowNotTerminal`              | Escrow not in a terminal state                         |
-| 2300 | `CannotCancelAssignedJob`        | Freelancer already assigned                            |
+Call `version()` to check what's deployed. The contract is upgradeable by its owner (`upgrade(new_wasm_hash)`), so the ID stays stable across releases.
 
 ---
 
-## Tech Stack
-
-### Smart Contracts
-
-- **Language:** Rust (no_std)
-- **SDK:** soroban-sdk 23.0.2
-- **Target:** wasm32v1-none
-- **Toolchain:** rust-toolchain.toml (stable channel pinned)
-
-### Frontend
-
-- **Framework:** React 19
-- **Language:** TypeScript
-- **Build:** Vite
-- **UI:** Radix UI + Tailwind CSS
-- **State:** Zustand
-- **Routing:** React Router
-- **Forms:** React Hook Form + Zod
-
-### Blockchain Integration
-
-- **SDK:** @stellar/stellar-sdk
-- **Wallets:** @creit.tech/stellar-wallets-kit (Freighter, xBull, Lobstr, etc.)
-- **Generated clients:** `src/contracts/generated/` (auto-generated from contract ABI)
-
-### Backend (Gasless API)
-
-- **Runtime:** Cloudflare Workers (Hono framework)
-- **Purpose:** Wraps user-signed XDRs in Stellar fee-bump transactions so applicants pay zero gas
-
----
-
-## Getting Started
+## Run it locally
 
 ### Prerequisites
 
-- [Rust](https://www.rust-lang.org/tools/install) stable toolchain
-- `wasm32v1-none` target: `rustup target add wasm32v1-none`
-- [Node.js](https://nodejs.org/) v22+
-- [Stellar CLI](https://github.com/stellar/stellar-cli) v25+
-- [Scaffold Stellar](https://github.com/AhaLabs/scaffold-stellar) plugin
+- Node.js 22+ and npm
+- Rust (the version in `rust-toolchain.toml`) with the `wasm32v1-none` target: `rustup target add wasm32v1-none`
+- [Stellar CLI](https://developers.stellar.org/docs/tools/cli/install-cli)
+- A Stellar wallet extension (e.g. Freighter) set to **Testnet**
 
-### Installation
+### 1. Frontend
 
 ```bash
-git clone https://github.com/yourusername/secureflow.git
-cd secureflow
+git clone https://github.com/Gbangbolaoluwagbemiga/SecureFlow-scaffold.git
+cd SecureFlow-scaffold
 npm install
+npm run install:contracts      # builds the generated contract client
+cp .env.example .env           # then fill it in (see Configuration)
+npm run dev                    # http://localhost:5173
 ```
 
-### Environment Setup
+### 2. Backend
 
 ```bash
-cp .env.example .env
+cd backend
+npm install
+cp .env.example .env           # then fill it in (see Configuration)
+npm run dev                    # http://localhost:8787, /health to check
 ```
 
-Edit `.env`:
+Point the frontend at it with `VITE_API_URL=http://localhost:8787`.
 
-```env
-VITE_STELLAR_NETWORK=testnet
-VITE_SECUREFLOW_CONTRACT_ID=CBWMVACS6BVU55SQOSU2YLE6PL4J6COXJAWZZLTVFRE4E7UYOW4DX5KQ
+### 3. Database (Supabase)
 
-# API backend (local dev: http://localhost:8787)
-VITE_API_URL=http://localhost:8787
-# Shared secret — must match API_SECRET in backend/.env
-VITE_API_SECRET=<your_shared_secret>
+Create a Supabase project, open **SQL Editor**, and run the files in `supabase/migrations/` in order (they're timestamped). Choose **Run and enable RLS** if asked: the backend uses the service-role key, which bypasses row-level security, and nothing else should touch these tables. Then put the project URL and **service-role** (or `sb_secret_…`) key in `backend/.env`.
 
-# Optional: USDC token contract address for the token dropdown
-VITE_USDC_TOKEN_CONTRACT=
-```
-
-### Build & Run
+### 4. Contract (optional, to deploy your own)
 
 ```bash
-# Start frontend dev server
-npm run dev
-# → http://localhost:5173
-
-# Build for production
-npm run build
-
-# Run contract tests
-cargo test --manifest-path contracts/secureflow/Cargo.toml
+cargo test -p secureflow
+stellar contract build
+stellar contract deploy --wasm target/wasm32v1-none/release/secureflow.wasm \
+  --source-account <identity> --network testnet
+stellar contract invoke --id <CONTRACT_ID> --source-account <identity> --network testnet -- \
+  initialize --owner <identity> --fee-collector <identity> --platform-fee-bp 100
 ```
 
-### Regenerate Contract Clients
-
-After any contract change and re-deploy, regenerate the TypeScript bindings:
-
-```bash
-stellar scaffold build --build-clients
-```
+Then set the new ID in `VITE_SECUREFLOW_CONTRACT_ID` and `SECUREFLOW_CONTRACT_ID`, and appoint the verifier with `set_verifier`.
 
 ---
 
-## Deployment
+## Configuration
 
-### Build WASM
+### Frontend (`.env`, and Vercel environment variables)
+
+| Variable                      | Required | Purpose                                                       |
+| ----------------------------- | -------- | ------------------------------------------------------------- |
+| `VITE_STELLAR_NETWORK`        | yes      | `testnet` or `mainnet`                                        |
+| `VITE_SECUREFLOW_CONTRACT_ID` | yes      | Deployed contract ID                                          |
+| `VITE_API_URL`                | yes      | Backend base URL (defaults to `http://localhost:8787` in dev) |
+| `VITE_API_SECRET`             | if set   | Must match the backend's `API_SECRET`                         |
+| `VITE_USDC_TOKEN_CONTRACT`    | no       | USDC token contract offered when creating a job               |
+| `VITE_OWNER_ADDRESS`          | no       | Contract owner, to show the Admin panel to that wallet        |
+
+### Backend (`backend/.env`, and Railway variables)
+
+| Variable                                                                                      | Required         | Purpose                                                                                |
+| --------------------------------------------------------------------------------------------- | ---------------- | -------------------------------------------------------------------------------------- |
+| `PORT`                                                                                        | no               | Defaults to 8787                                                                       |
+| `API_SECRET`                                                                                  | in production    | Bearer token the frontend sends; leaves `/v1` open if unset                            |
+| `FRONTEND_URL` / `FRONTEND_URL_PATTERN`                                                       | in production    | CORS: comma-separated origins / a regex for preview deployments                        |
+| `SECUREFLOW_CONTRACT_ID`                                                                      | yes              | Contract the backend acts on                                                           |
+| `STELLAR_RPC_URL`, `STELLAR_NETWORK_PASSPHRASE`                                               | no               | Default to testnet                                                                     |
+| `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`                                                   | yes              | Notifications, messages, applications, uploads                                         |
+| `ADMIN_SECRET_KEY`                                                                            | for gasless      | Account that fee-bumps freelancers' applications                                       |
+| `GROQ_API_KEY`                                                                                | for AI           | AI writers, and Autopilot's fallback model                                             |
+| `XAI_API_KEY`                                                                                 | no               | Runs Autopilot on Grok                                                                 |
+| `AUTOPILOT_SECRET_KEY`                                                                        | for Autopilot    | The agent's own account. Use a dedicated key, never the owner's                        |
+| `AUTOPILOT_DATA_DIR`                                                                          | in production    | Where Autopilot keeps its state; mount a persistent volume here                        |
+| `AUTOPILOT_MODEL`, `AUTOPILOT_VERIFIED_EDGE`, `AUTOPILOT_HIRE_THRESHOLD`, `AUTOPILOT_POLL_MS` | no               | Overrides (defaults: provider default model, 10, 60, 20000 ms)                         |
+| `DIDIT_API_KEY`, `DIDIT_WORKFLOW_ID`, `DIDIT_WEBHOOK_SECRET`                                  | for verification | From the Didit console; give the API key only Sessions-write and Decisions-read access |
+| `DIDIT_CALLBACK_URL`                                                                          | no               | Where Didit returns the user after verifying                                           |
+| `IDENTITY_HASH_SALT`                                                                          | for verification | Long random secret. Never change it once live: it would let people verify twice        |
+| `VERIFIER_SECRET_KEY`                                                                         | for verification | Account appointed with `set_verifier` to attest verifications                          |
+| `PINATA_JWT`                                                                                  | for evidence     | IPFS uploads for dispute evidence                                                      |
+
+Generate dedicated keys with the Stellar CLI (`stellar keys generate <name> --network testnet --fund`) and copy secrets with `stellar keys show <name>` straight into your host's variables. Never commit them.
+
+---
+
+## Deploying to production
+
+**Frontend → Vercel.** Import the repo, framework preset **Vite**, build command `npm run build`, output `dist`. Add the frontend variables above. Every push to `main` deploys; pull requests get preview URLs.
+
+**Backend → Railway.** Create a service from the repo with root directory `backend` (`railway.json` sets the build, start command and `/health` check). Add the backend variables, then:
+
+1. Add a **volume** and set `AUTOPILOT_DATA_DIR` to its mount path, so Autopilot keeps its review history across deploys.
+2. Set `FRONTEND_URL` to your Vercel domain and `API_SECRET` to a long random value (and the same value in Vercel's `VITE_API_SECRET`).
+3. In the Didit console, point the webhook at `https://<your-backend>/webhooks/didit`.
+
+**Contract.** Build, upload and upgrade in place (owner only):
 
 ```bash
 stellar contract build
-# Output: target/wasm32v1-none/release/secureflow.wasm  (~59 KB)
+HASH=$(stellar contract upload --wasm target/wasm32v1-none/release/secureflow.wasm \
+  --source-account <owner> --network testnet)
+stellar contract invoke --id <CONTRACT_ID> --source-account <owner> --network testnet -- \
+  upgrade --new_wasm_hash $HASH
 ```
 
-### Upload & Deploy (testnet)
+After an upgrade that adds indexes, backfill them with `rebuild_indexes --from_id 1 --to_id <n>`.
+
+**Go-live checklist**
+
+- [ ] `/health` returns `{"ok":true,"supabase":"ok"}`
+- [ ] `API_SECRET` / `VITE_API_SECRET` set; `FRONTEND_URL` restricts CORS
+- [ ] Autopilot volume mounted; `GET /v1/autopilot/info` shows `"enabled": true`
+- [ ] Gasless, verifier and Autopilot accounts funded, and separate from the owner key
+- [ ] Didit webhook reaches the backend; a test verification shows the Verified tag
+- [ ] Supabase tables have RLS enabled
+
+---
+
+## Contract reference
+
+Every failure returns a specific error code, which the app translates into plain language (`src/lib/web3/contract-errors.ts`). Codes are grouped: 1000s admin, 1100s escrow state, 1200s creation, 1300s marketplace, 1400s milestones, 1500s refunds and deadlines, 1600s authorisation, 1700s validation, 1800s ratings, 1900s evidence, 2000s+ pause, tokens, editing, cancellation, negotiation, job manager, transfers and verification.
+
+| Area         | Entry points                                                                                                                                                  |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Escrow       | `create_escrow`, `quote_deposit`, `start_work`, `cancel_job`, `refund_escrow`, `extend_deadline`, `emergency_refund_after_deadline`                           |
+| Milestones   | `submit_milestone`, `resubmit_milestone`, `approve_milestone`, `reject_milestone`, `dispute_milestone`, `add_milestone`, `remove_milestone`, `set_milestones` |
+| Funds        | `add_job_funds`, `withdraw_job_funds`                                                                                                                         |
+| Marketplace  | `apply_to_job`, `accept_freelancer`, `decline_assignment`, `reopen_job`                                                                                       |
+| Negotiation  | `propose_milestone_change`, `approve_milestone_proposal`, `reject_milestone_proposal`                                                                         |
+| Job manager  | `set_job_manager`, `revoke_job_manager`, `get_job_manager`, `is_job_manager`                                                                                  |
+| Disputes     | `resolve_dispute`, `raise_overdue_dispute`, `arbiter_approve_refund`, `arbiter_award_freelancer`, `submit_evidence`                                           |
+| Reputation   | `submit_rating`, `submit_client_rating`, `get_average_rating`, `get_badge`, `get_reputation`                                                                  |
+| Verification | `set_verifier`, `attest_verification`, `revoke_verification`, `is_verified`                                                                                   |
+| Reads        | `get_escrow`, `get_escrows` (batch ≤ 50), `get_open_jobs`, `get_freelancer_applications`, `get_milestones`, `get_applications_page`                           |
+| Admin        | pause/unpause, fees and fee collector, token whitelist/blacklist, arbiters, `withdraw_fees`, `delete_escrow`, `upgrade`, `rebuild_indexes`                    |
+
+Limits: 20 milestones, 5 arbiters, 50 applications per job, durations of 1 hour to 365 days, platform fee ≤ 10%.
+
+---
+
+## Backend API
+
+All `/v1` routes expect `Authorization: Bearer <API_SECRET>` when it's set.
+
+| Route                                            | Purpose                                                |
+| ------------------------------------------------ | ------------------------------------------------------ |
+| `GET /health`                                    | Liveness, plus whether Supabase actually answers       |
+| `POST /v1/gasless/apply`                         | Fee-bump and submit a freelancer's signed application  |
+| `POST /v1/verification/session`, `GET /status`   | Start a Didit check, read a wallet's status            |
+| `POST /webhooks/didit`                           | Didit results (HMAC-signed, no API secret)             |
+| `GET /v1/autopilot/info`, `/jobs`, `/jobs/:id`   | Agent address and settings, managed jobs, decision log |
+| `POST /v1/autopilot/preview`, `/handover`        | Draft criteria; record the client's signed hand-over   |
+| `/v1/notifications`, `/v1/messages`              | Notifications and client–freelancer chat               |
+| `/v1/applications`, `/v1/upload`, `/v1/evidence` | Application records, attachments, IPFS evidence        |
+| `/v1/ai/*`                                       | AI help writing milestones, cover letters and rewrites |
+| `/v1/analytics/*`                                | Platform and per-user statistics                       |
+
+---
+
+## Testing
 
 ```bash
-# Upload WASM
-stellar contract upload \
-  --wasm target/wasm32v1-none/release/secureflow.wasm \
-  --source me \
-  --network testnet
-
-# Deploy contract
-stellar contract deploy \
-  --wasm-hash <WASM_HASH> \
-  --source me \
-  --network testnet
-
-# Initialize (replace CONTRACT_ID with output of deploy)
-stellar contract invoke \
-  --id <CONTRACT_ID> \
-  --source me \
-  --network testnet \
-  -- initialize \
-  --owner me \
-  --fee-collector me \
-  --platform-fee-bp 250
+cargo test -p secureflow                                   # 20 contract tests
+cargo clippy -p secureflow --all-targets -- -D warnings    # lint the contract
+npm run lint && npx prettier . --check && npm run build    # frontend
+(cd backend && npx tsc --noEmit -p .)                      # backend
 ```
 
-Update `VITE_SECUREFLOW_CONTRACT_ID` in `.env` and `environments.toml` with the new contract ID.
+CI runs these as independent jobs on every push and pull request, plus a smoke test that deploys the contract to a local Stellar network.
 
 ---
 
-## Security
+## Security model
 
-### What is secure
+- **Funds only move by contract rules.** Nobody, including the platform, can withdraw a client's escrow; the owner can only collect earned fees and recover tokens that were never part of an escrow.
+- **Least privilege for every server key.** The gasless key only pays fees; the verifier key can only attest identities; the Autopilot key can only act on jobs a client explicitly handed it, and can never move money to itself.
+- **Client consent is signed.** Autopilot's criteria are bound to the client's wallet signature.
+- **Untrusted text stays data.** LLM prompts wrap user content and detect injection attempts; fetched links are SSRF-guarded.
+- **No personal data on-chain.** Identity verification stores only a salted, irreversible hash.
 
-- **No secrets in git** — `.env` and `backend/.env` are gitignored. Verified via `git ls-files`.
-- **Stellar identity** (`me.toml`) — stored at `~/.config/stellar/identity/`, outside the repo, matched by `.gitignore: **/identity/*.toml`.
-- **On-chain auth** — all write operations call `address.require_auth()`. No off-chain bypass possible.
-- **Pause guard** — `require_not_paused` wraps every state-changing entrypoint. Owner can halt everything instantly.
-- **Fee protection** — fee is earmarked at `start_work`, not at creation, preventing early withdrawal griefing.
-- **Re-dispute fix** — `DisputeVoteCount` is reset to 0 after each resolution, preventing stale vote counts from triggering a second execution.
-
-### What to know
-
-| Risk                                     | Status                                | Mitigation                                                                                                    |
-| ---------------------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `ADMIN_SECRET_KEY` in `backend/.env`     | Not in git                            | This key controls the gasless fee-bump wallet AND owns the contract. Rotate immediately if compromised.       |
-| `VITE_API_SECRET` bundled in frontend JS | By design                             | Provides light authorization for the gasless API. Not a blockchain private key. Rotate via backend re-deploy. |
-| `VITE_SECRET_KEY` in `.env`              | Not in git, not used in frontend code | Stale variable — safe to remove.                                                                              |
-| Soroban testnet resets                   | Periodic                              | Redeploy WASM, call `initialize`, update `.env` and `environments.toml`.                                      |
-| Contract instance TTL                    | Managed                               | All writes call `extend_ttl(INSTANCE_LIFETIME_THRESHOLD, INSTANCE_BUMP_AMOUNT)`.                              |
+Found a vulnerability? Please follow [SECURITY.md](SECURITY.md) rather than opening a public issue.
 
 ---
 
-## Usage Guide
-
-### For Clients
-
-1. **Create a Job** — set title, description, deadline, milestones, and deposit funds.
-2. **Review Applications** — freelancers apply; you see cover letters, timelines, badges, and ratings.
-3. **Accept a Freelancer** — call `accept_freelancer`; contract is now `Pending` awaiting `start_work`.
-4. **Review Milestones** — approve (payment released), reject (request revisions), or dispute (arbiter vote).
-5. **Negotiate** — accept or reject a freelancer's milestone change proposal.
-
-### For Freelancers
-
-1. **Browse Jobs** — filter open jobs by budget, token, deadline.
-2. **Apply** — cover letter + proposed timeline (gasless — no XLM required).
-3. **Start Work** — call `start_work` once selected.
-4. **Submit Milestones** — submit each milestone with a description when done.
-5. **Dispute** — if a rejection is unfair, dispute and attach IPFS evidence.
-6. **Propose Changes** — if scope changes, propose a milestone renegotiation.
-
-### For Arbiters
-
-1. **Authorized by owner** — must be added via `authorize_arbiter`.
-2. **Review disputes** — examine on-chain evidence (IPFS CIDs).
-3. **Vote** — call `resolve_dispute` with a precise `freelancer_amount` + `client_amount` split.
-4. **Quorum executes** — when `required_confirmations` votes are reached, payout executes automatically.
-
-### For Platform Admins
-
-1. **Admin Panel** — requires owner wallet address.
-2. **Pause** — `pause_contract` halts all write ops; `pause_job_creation` halts only new jobs.
-3. **Fees** — set `platform_fee_bp`, update `fee_collector`, call `withdraw_fees` per token.
-4. **Tokens** — whitelist or blacklist tokens; blacklisted tokens block new escrow creation.
-5. **Arbiters** — authorize or revoke arbiter wallets.
-6. **Cleanup** — call `delete_escrow` on terminal, zero-balance escrows to reclaim storage.
-
----
-
-## Project Structure
+## Project structure
 
 ```
-secureflow/
-├── contracts/
-│   └── secureflow/
-│       ├── Cargo.toml
-│       └── src/
-│           ├── lib.rs                 Contract entrypoints
-│           ├── storage_types.rs       Enums, structs, DataKey, error codes
-│           ├── escrow_core.rs         Storage helpers, token transfers
-│           ├── escrow_management.rs   create_escrow, cancel_job, fund management
-│           ├── work_lifecycle.rs      Milestone workflow, negotiation, resolve_dispute
-│           ├── refund_system.rs       Refunds, deadline, overdue disputes
-│           ├── marketplace.rs         Applications, accept freelancer
-│           ├── ratings.rs             Ratings, badges, reputation
-│           ├── evidence.rs            IPFS evidence storage
-│           └── admin.rs               Pause, blacklist, fee withdrawal, delete_escrow
-├── src/
-│   ├── components/
-│   │   ├── admin/                     Admin panel components
-│   │   ├── approvals/                 Milestone approval UI
-│   │   ├── create/                    Job creation wizard
-│   │   ├── dashboard/                 Stats, escrow cards
-│   │   ├── freelancer/                Freelancer dashboard
-│   │   ├── jobs/                      Job marketplace
-│   │   ├── notification-center.tsx    On-chain event notifications
-│   │   └── ui/                        Radix UI wrappers
-│   ├── contexts/
-│   │   ├── web3-context.tsx           Wallet + contract call context
-│   │   └── notification-context.tsx  Notification state
-│   ├── contracts/
-│   │   └── generated/                 Auto-generated TS contract clients
-│   ├── lib/
-│   │   ├── web3/
-│   │   │   ├── contract-service.ts    Full contract method bindings
-│   │   │   ├── stellar-config.ts      Network config, contract IDs
-│   │   │   └── wallet-signer.ts       Transaction signing helpers
-│   │   └── api.ts                     Backend API client (gasless)
-│   ├── pages/
-│   │   ├── AdminPage.tsx
-│   │   ├── ApprovalsPage.tsx
-│   │   ├── CreatePage.tsx
-│   │   ├── DashboardPage.tsx
-│   │   ├── FreelancerPage.tsx
-│   │   ├── JobsPage.tsx
-│   │   └── HomePage.tsx
-│   └── store/
-│       └── wallet.store.ts            Zustand wallet state
-├── backend/                           Gasless API (Cloudflare Workers)
-│   ├── src/
-│   └── .env.example
-├── environments.toml                  Stellar scaffold env config
-├── Cargo.toml                         Workspace manifest
-├── package.json
-└── README.md
+contracts/secureflow/src/
+  lib.rs                 entry points
+  storage_types.rs       types, storage keys, error codes, limits
+  escrow_core.rs         storage, TTLs, indexes, token transfers
+  escrow_management.rs   create, cancel, funds, job manager, reopen
+  work_lifecycle.rs      milestones, negotiation, dispute resolution
+  refund_system.rs       refunds, deadlines, overdue disputes
+  marketplace.rs         applications, hiring
+  verification.rs        identity attestations
+  ratings.rs  evidence.rs  admin.rs  events.rs  test.rs
+
+src/                     React app
+  pages/                 Home, Jobs, Create, Dashboard, Freelancer, Approvals, Admin, Analytics
+  components/autopilot/  hand-over dialog, panel and decision log, badges
+  components/verification/  Verified badge, identity card
+  lib/web3/              contract service, error messages, event indexer, wallet signing
+  lib/autopilot.ts       Autopilot API client
+  contracts/generated/   generated contract client
+
+backend/src/
+  index.ts               server, CORS, rate limits
+  routes/                gasless, verification, autopilot, notifications, messages, uploads, AI, analytics
+  lib/autopilot/         chain actions, model client, scorer and reviewer, runner, store
+  lib/didit.ts           Didit sessions, webhook verification, on-chain attestation
+
+supabase/migrations/     database schema
 ```
 
 ---
 
 ## Contributing
 
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/your-feature`
-3. Make your changes with tests
-4. Run `cargo test` and `node node_modules/typescript/bin/tsc --noEmit`
-5. Commit and open a Pull Request
+1. Fork the repo and create a branch: `git checkout -b feat/your-change`
+2. Make the change, with tests where it touches the contract
+3. Run the checks under [Testing](#testing)
+4. Open a pull request
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
 
----
-
 ## License
 
-MIT — see [LICENSE](LICENSE).
-
----
-
-## Acknowledgments
-
-- Built with [Scaffold Stellar](https://github.com/AhaLabs/scaffold-stellar)
-- Powered by [Stellar](https://stellar.org) and [Soroban](https://soroban.stellar.org)
-- UI components from [Radix UI](https://www.radix-ui.com/)
-
----
-
-<div align="center">
-
-Built on Stellar · [Soroban Docs](https://developers.stellar.org/docs/smart-contracts) · [Stellar Expert (testnet)](https://stellar.expert/explorer/testnet/contract/CBWMVACS6BVU55SQOSU2YLE6PL4J6COXJAWZZLTVFRE4E7UYOW4DX5KQ)
-
-</div>
+[Apache-2.0](LICENSE). Built with [Scaffold Stellar](https://github.com/theahaco/scaffold-stellar).
