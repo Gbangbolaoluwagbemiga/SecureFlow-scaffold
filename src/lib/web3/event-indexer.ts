@@ -167,18 +167,43 @@ function appendEvents(newEvents: IndexedEvent[]): void {
   localStorage.setItem(EVENTS_STORAGE_KEY, JSON.stringify(combined));
 }
 
-function getStoredCursor(): string | null {
-  return localStorage.getItem(CURSOR_STORAGE_KEY);
+/**
+ * The cursor is kept per contract. A single shared one survived a change of
+ * contract ID and kept pointing into the old one's history.
+ */
+function cursorKey(contractId: string): string {
+  return `${CURSOR_STORAGE_KEY}_${contractId}`;
 }
 
-function setStoredCursor(cursor: string): void {
-  localStorage.setItem(CURSOR_STORAGE_KEY, cursor);
+function getStoredCursor(contractId: string): string | null {
+  try {
+    return localStorage.getItem(cursorKey(contractId));
+  } catch {
+    return null;
+  }
+}
+
+function setStoredCursor(contractId: string, cursor: string): void {
+  try {
+    localStorage.setItem(cursorKey(contractId), cursor);
+  } catch {
+    // storage blocked: the next sync looks back from the tip again
+  }
+}
+
+function clearStoredCursor(contractId: string): void {
+  try {
+    localStorage.removeItem(cursorKey(contractId));
+  } catch {
+    /* ignore */
+  }
 }
 
 /** Call this when you want to force a full re-index from scratch */
 export function clearEventCache(): void {
   localStorage.removeItem(EVENTS_STORAGE_KEY);
   localStorage.removeItem(CURSOR_STORAGE_KEY);
+  localStorage.removeItem(cursorKey(CONTRACTS.SECUREFLOW_ESCROW));
 }
 
 // ─── Query helpers ─────────────────────────────────────────────────────────────
@@ -237,37 +262,44 @@ export async function syncEvents(): Promise<IndexedEvent[]> {
   if (!contractId || !/^C[A-Z2-7]{55}$/.test(contractId)) return [];
 
   const server = new rpc.Server(network.rpcUrl);
-  const storedCursor = getStoredCursor();
+  const storedCursor = getStoredCursor(contractId);
+  const filters: rpc.Server.GetEventsRequest["filters"] = [
+    { type: "contract", contractIds: [contractId] },
+  ];
 
-  const request: rpc.Server.GetEventsRequest = {
-    filters: [
-      {
-        type: "contract",
-        contractIds: [contractId],
-      },
-    ],
-    limit: 200,
-  };
-
-  if (storedCursor) {
-    request.cursor = storedCursor;
-  } else {
-    // First run — fetch latest ledger and look back
+  const fromTip = async (): Promise<rpc.Server.GetEventsRequest> => {
     const latestLedger = await server.getLatestLedger();
-    request.startLedger = Math.max(1, latestLedger.sequence - INITIAL_LOOKBACK);
-  }
+    return {
+      filters,
+      limit: 200,
+      startLedger: Math.max(1, latestLedger.sequence - INITIAL_LOOKBACK),
+    };
+  };
 
   let response: rpc.Api.GetEventsResponse;
   try {
-    response = await server.getEvents(request);
+    response = await server.getEvents(
+      storedCursor
+        ? { filters, limit: 200, cursor: storedCursor }
+        : await fromTip(),
+    );
   } catch {
-    // RPC unavailable or contract has no events yet — fail silently
-    return [];
+    if (!storedCursor) return []; // RPC unavailable: try again next poll
+    // The node only keeps about a week of events. A cursor older than that is
+    // refused on every call ("startLedger must be within the ledger range"),
+    // and swallowing that silently left a browser that hadn't visited for a
+    // while hearing nothing, ever, reload or not. Start again from the tip.
+    clearStoredCursor(contractId);
+    try {
+      response = await server.getEvents(await fromTip());
+    } catch {
+      return [];
+    }
   }
 
   if (!response.events || response.events.length === 0) {
     // Advance cursor even when no events so next poll starts from here
-    if (response.cursor) setStoredCursor(response.cursor);
+    if (response.cursor) setStoredCursor(contractId, response.cursor);
     return [];
   }
 
@@ -289,7 +321,7 @@ export async function syncEvents(): Promise<IndexedEvent[]> {
 
   appendEvents(parsed);
 
-  if (response.cursor) setStoredCursor(response.cursor);
+  if (response.cursor) setStoredCursor(contractId, response.cursor);
 
   return parsed;
 }
