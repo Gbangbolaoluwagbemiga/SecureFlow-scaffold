@@ -145,6 +145,10 @@ export function JobManagement({
     (notStarted && !hasFreelancer && onChainOpen === false) ||
     (inProgress && arbitrated);
 
+  // Once work is under way nothing here applies until an arbiter has ruled,
+  // so an empty card would only take up space.
+  if (!canAddFunds && !canWithdraw && !canReopen) return null;
+
   const currentXlm = stroopsToXlm(totalAmount);
   const addXlmNum = parseFloat(addXlm || "0");
   const withdrawXlmNum = parseFloat(withdrawXlm || "0");
