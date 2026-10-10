@@ -322,3 +322,54 @@ export async function getIdentityVerificationStatus(
     `/v1/verification/status?wallet=${encodeURIComponent(wallet)}`,
   );
 }
+
+// ─── Archived escrows (per-wallet view preference) ──────────────────────────
+
+const localArchiveKey = (wallet: string) => `secureflow_archived_${wallet}`;
+
+function readLocalArchive(wallet: string): number[] {
+  try {
+    return JSON.parse(localStorage.getItem(localArchiveKey(wallet)) ?? "[]");
+  } catch {
+    return [];
+  }
+}
+
+function writeLocalArchive(wallet: string, ids: number[]): void {
+  try {
+    localStorage.setItem(localArchiveKey(wallet), JSON.stringify(ids));
+  } catch {
+    /* storage blocked: the archive just won't persist on this device */
+  }
+}
+
+/** Escrow ids this wallet has archived. Falls back to this browser's copy. */
+export async function getArchivedEscrows(wallet: string): Promise<number[]> {
+  if (!isApiConfigured()) return readLocalArchive(wallet);
+  try {
+    const { escrowIds } = await apiFetch<{ escrowIds: number[] }>(
+      `/v1/archive?wallet=${encodeURIComponent(wallet)}`,
+    );
+    writeLocalArchive(wallet, escrowIds);
+    return escrowIds;
+  } catch {
+    return readLocalArchive(wallet);
+  }
+}
+
+export async function setEscrowArchived(
+  wallet: string,
+  escrowId: number,
+  archived: boolean,
+): Promise<void> {
+  if (isApiConfigured()) {
+    await apiFetch("/v1/archive", {
+      method: archived ? "POST" : "DELETE",
+      body: JSON.stringify({ wallet, escrowId }),
+    });
+  }
+  const ids = new Set(readLocalArchive(wallet));
+  if (archived) ids.add(escrowId);
+  else ids.delete(escrowId);
+  writeLocalArchive(wallet, [...ids]);
+}

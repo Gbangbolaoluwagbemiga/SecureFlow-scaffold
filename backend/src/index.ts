@@ -13,6 +13,7 @@ import { analyticsRouter } from "./routes/analytics.js";
 import { applicationsRouter } from "./routes/applications.js";
 import { getSupabase } from "./lib/supabase.js";
 import { autopilotRouter } from "./routes/autopilot.js";
+import { archiveRouter } from "./routes/archive.js";
 import { startAutopilot } from "./lib/autopilot/runner.js";
 import {
   diditWebhookRouter,
@@ -124,6 +125,7 @@ app.use("/v1/verification", auth, verificationRouter);
 // Writing criteria is an LLM call, so previews share the AI limiter.
 app.use("/v1/autopilot/preview", aiLimiter);
 app.use("/v1/autopilot", auth, autopilotRouter);
+app.use("/v1/archive", auth, archiveRouter);
 // Called by Didit, not the browser: authenticated by Didit's HMAC signature,
 // so it sits outside the API-secret check.
 app.use("/webhooks/didit", diditWebhookRouter);

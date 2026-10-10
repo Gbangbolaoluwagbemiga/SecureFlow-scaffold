@@ -18,6 +18,8 @@ import {
   Scale,
   Paperclip,
   MessageCircle,
+  Archive,
+  ArchiveRestore,
 } from "lucide-react";
 import { MilestoneActions } from "@/components/milestone-actions";
 import { MilestoneNegotiation } from "@/components/milestone-negotiation";
@@ -61,6 +63,8 @@ interface EscrowCardProps {
   };
   onRaiseOverdueDispute?: (escrowId: string, reason: string) => void;
   onExtendDeadline?: (escrowId: string, extraDays: number) => void;
+  isArchived?: boolean;
+  onToggleArchived?: (escrowId: string, archive: boolean) => void;
 }
 
 export function EscrowCard({
@@ -72,6 +76,8 @@ export function EscrowCard({
   getDaysLeftMessage,
   onRaiseOverdueDispute,
   onExtendDeadline,
+  isArchived = false,
+  onToggleArchived,
 }: EscrowCardProps) {
   const { toast } = useToast();
   const [showRatingDialog, setShowRatingDialog] = useState(false);
@@ -722,6 +728,30 @@ export function EscrowCard({
                       Rate Freelancer
                     </Button>
                   )}
+                </div>
+              )}
+            {/* Archive: tidy finished jobs off the dashboard (view only) */}
+            {onToggleArchived &&
+              ["completed", "refunded", "cancelled", "expired"].includes(
+                escrow.status,
+              ) && (
+                <div className="mt-4 flex justify-end">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="gap-1.5 text-muted-foreground"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onToggleArchived(escrow.id, !isArchived);
+                    }}
+                  >
+                    {isArchived ? (
+                      <ArchiveRestore className="h-4 w-4" />
+                    ) : (
+                      <Archive className="h-4 w-4" />
+                    )}
+                    {isArchived ? "Unarchive" : "Archive"}
+                  </Button>
                 </div>
               )}
           </div>

@@ -36,7 +36,8 @@ import {
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, Archive } from "lucide-react";
+import { getArchivedEscrows, setEscrowArchived } from "@/lib/api";
 
 export default function DashboardPage() {
   const { wallet, refreshBalance } = useWeb3();
@@ -56,6 +57,56 @@ export default function DashboardPage() {
     "all" | "pending" | "active" | "completed" | "disputed"
   >("all");
   const [sortFilter, setSortFilter] = useState<"newest" | "oldest">("newest");
+  // Finished jobs this wallet has archived: hidden unless "Show archived".
+  const [archivedIds, setArchivedIds] = useState<Set<number>>(new Set());
+  const [showArchived, setShowArchived] = useState(false);
+
+  useEffect(() => {
+    if (!wallet.address) {
+      setArchivedIds(new Set());
+      return;
+    }
+    let cancelled = false;
+    void getArchivedEscrows(wallet.address).then((ids) => {
+      if (!cancelled) setArchivedIds(new Set(ids.map(Number)));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [wallet.address]);
+
+  const toggleArchived = async (escrowId: string, archive: boolean) => {
+    if (!wallet.address) return;
+    const id = Number(escrowId);
+    // Optimistic: the card moves at once, and comes back if the save fails.
+    setArchivedIds((prev) => {
+      const next = new Set(prev);
+      if (archive) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+    try {
+      await setEscrowArchived(wallet.address, id, archive);
+      toast({
+        title: archive ? "Job archived" : "Job restored",
+        description: archive
+          ? "It's hidden from your dashboard. Use Show archived to see it again."
+          : "It's back on your dashboard.",
+      });
+    } catch (error: any) {
+      setArchivedIds((prev) => {
+        const next = new Set(prev);
+        if (archive) next.delete(id);
+        else next.add(id);
+        return next;
+      });
+      toast({
+        title: archive ? "Couldn't archive" : "Couldn't restore",
+        description: error?.message || "Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
   const [expandedEscrow, setExpandedEscrow] = useState<string | null>(null);
   const [submittingMilestone, setSubmittingMilestone] = useState<string | null>(
     null,
@@ -1109,6 +1160,23 @@ export default function DashboardPage() {
             </Select>
           </div>
 
+          {/* Archived toggle */}
+          {archivedIds.size > 0 && (
+            <div className="w-full sm:w-auto">
+              <Label className="mb-2 block text-sm">Archive</Label>
+              <Button
+                variant={showArchived ? "default" : "outline"}
+                className="w-full gap-2"
+                onClick={() => setShowArchived(!showArchived)}
+              >
+                <Archive className="h-4 w-4" />
+                {showArchived
+                  ? "Back to active"
+                  : `Show archived (${archivedIds.size})`}
+              </Button>
+            </div>
+          )}
+
           {/* Sort Filter */}
           <div className="w-full sm:w-[180px]">
             <Label htmlFor="sort-filter" className="mb-2 block text-sm">
@@ -1153,7 +1221,11 @@ export default function DashboardPage() {
                       .toLowerCase()
                       .includes(searchQuery.toLowerCase()));
 
-                return matchesStatus && matchesSearch;
+                // Archived jobs live behind the "Show archived" toggle.
+                const matchesArchive =
+                  archivedIds.has(Number(escrow.id)) === showArchived;
+
+                return matchesStatus && matchesSearch && matchesArchive;
               })
               .sort((a, b) => {
                 if (sortFilter === "newest") {
@@ -1195,6 +1267,8 @@ export default function DashboardPage() {
                   getDaysLeftMessage={getDaysLeftMessage}
                   onRaiseOverdueDispute={raiseOverdueDispute}
                   onExtendDeadline={extendDeadline}
+                  isArchived={archivedIds.has(Number(escrow.id))}
+                  onToggleArchived={toggleArchived}
                 />
               ))}
           </div>
