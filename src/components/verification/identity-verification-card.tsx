@@ -113,17 +113,19 @@ export function IdentityVerificationCard({ wallet }: { wallet: string }) {
 
   if (verified === null) return null;
 
+  // Verified: one slim line, not a card. It says what verification is
+  // buying them without taking a slab of the dashboard to do it.
   if (verified) {
     return (
-      <Card className="glass border-emerald-500/30 p-4 flex items-center gap-3">
-        <BadgeCheck className="h-6 w-6 text-emerald-500 shrink-0" />
-        <div className="text-sm">
-          <p className="font-semibold">Identity verified</p>
-          <p className="text-muted-foreground">
-            Clients see a Verified tag next to your applications and jobs.
-          </p>
-        </div>
-      </Card>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-full border border-emerald-500/30 bg-emerald-500/[0.07] px-4 py-2 text-sm w-fit max-w-full">
+        <span className="flex items-center gap-1.5 font-medium text-emerald-600 dark:text-emerald-400">
+          <BadgeCheck className="h-4 w-4 shrink-0" />
+          Identity verified
+        </span>
+        <span className="text-muted-foreground">
+          Clients see your Verified tag · +10 when Autopilot ranks applicants
+        </span>
+      </div>
     );
   }
 
