@@ -102,6 +102,27 @@ const normalizeMilestoneStatus = (rawStatus: any): number => {
 
 const formatTokens = (raw: bigint): string => (Number(raw) / 1e7).toFixed(2);
 
+/** Run `fn` over `items` with at most `limit` in flight; results in order. */
+async function mapLimit<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const out = new Array<R>(items.length);
+  let next = 0;
+  const workers = Array.from(
+    { length: Math.min(limit, items.length) },
+    async () => {
+      while (next < items.length) {
+        const i = next++;
+        out[i] = await fn(items[i]!);
+      }
+    },
+  );
+  await Promise.all(workers);
+  return out;
+}
+
 export default function AnalyticsPage() {
   const { wallet } = useWeb3();
   const { toast } = useToast();
@@ -138,61 +159,63 @@ export default function AnalyticsPage() {
         disputed: 0,
       };
 
-      for (let i = 1; i <= totalEscrows; i++) {
+      // Every escrow in batches of 50, then the milestone checks in
+      // parallel. This used to read escrow 1, then its milestones, then
+      // escrow 2... one request at a time, so the page took longer with every
+      // job ever posted.
+      const ids = Array.from({ length: totalEscrows }, (_, i) => i + 1);
+      const [escrows, userEscrowIds] = await Promise.all([
+        contractService.getEscrowsBatch(ids),
+        wallet.address
+          ? contractService.getUserEscrows(wallet.address).catch(() => [])
+          : Promise.resolve([] as number[]),
+      ]);
+      const disputedFlags = await mapLimit(escrows, 8, async (escrow) => {
         try {
-          const escrow = await contractService.getEscrow(i);
-          if (!escrow) continue;
+          const milestones = await contractService.getMilestones(
+            escrow.escrow_id,
+          );
+          return milestones.some((m: { status: unknown }) => {
+            const msStatus = normalizeMilestoneStatus(m.status);
+            return msStatus === 3 || msStatus === 4; // disputed or resolved
+          });
+        } catch {
+          return false;
+        }
+      });
 
-          const amount = BigInt(escrow.amount || "0");
-          totalVolumeRaw += amount;
-          if (platformFeeBP > 0) {
-            totalFeesRaw += (amount * BigInt(platformFeeBP)) / 10000n;
-          }
+      escrows.forEach((escrow, i) => {
+        const amount = BigInt(escrow.amount || "0");
+        totalVolumeRaw += amount;
+        if (platformFeeBP > 0) {
+          totalFeesRaw += (amount * BigInt(platformFeeBP)) / 10000n;
+        }
 
-          // Check milestones for disputed (3) or resolved (4) status
-          let hasDisputedMilestone = false;
-          try {
-            const milestones = await contractService.getMilestones(i);
-            for (const m of milestones) {
-              const msStatus = normalizeMilestoneStatus(m.status);
-              if (msStatus === 3 || msStatus === 4) {
-                hasDisputedMilestone = true;
-                break;
-              }
-            }
-          } catch {
-            // ignore milestone fetch errors
-          }
-
-          if (hasDisputedMilestone) {
+        if (disputedFlags[i]) {
+          disputedEscrows++;
+          statusDistribution.disputed++;
+          return;
+        }
+        // ESCROW_STATUS_NUMBER: 0 pending, 1 active, 2 released, 3 disputed,
+        // 5+ refunded / expired / cancelled (closed, kept out of the chart).
+        switch (escrow.status) {
+          case 0:
+            statusDistribution.pending++;
+            break;
+          case 1:
+            activeEscrows++;
+            statusDistribution.inProgress++;
+            break;
+          case 2:
+            completedEscrows++;
+            statusDistribution.released++;
+            break;
+          case 3:
             disputedEscrows++;
             statusDistribution.disputed++;
-          } else {
-            // Stellar service status: 0=Pending, 1=InProgress, 2=Released, 3=Disputed
-            switch (escrow.status) {
-              case 0:
-                statusDistribution.pending++;
-                break;
-              case 1:
-                activeEscrows++;
-                statusDistribution.inProgress++;
-                break;
-              case 2:
-                completedEscrows++;
-                statusDistribution.released++;
-                break;
-              case 3:
-                disputedEscrows++;
-                statusDistribution.disputed++;
-                break;
-              default:
-                statusDistribution.pending++;
-            }
-          }
-        } catch {
-          continue;
+            break;
         }
-      }
+      });
 
       const completionRate =
         totalEscrows > 0
@@ -219,9 +242,6 @@ export default function AnalyticsPage() {
       // User-specific analytics (only when wallet is connected)
       if (wallet.address) {
         try {
-          const userEscrowIds = await contractService.getUserEscrows(
-            wallet.address,
-          );
           let userCompleted = 0;
           let userActive = 0;
           let userAsClient = 0;
@@ -229,31 +249,27 @@ export default function AnalyticsPage() {
           let userEarned = 0n;
           let userSpent = 0n;
 
-          for (const escrowId of userEscrowIds) {
-            try {
-              const escrow = await contractService.getEscrow(escrowId);
-              if (!escrow) continue;
+          const userEscrows = await contractService.getEscrowsBatch([
+            ...new Set(userEscrowIds.map(Number)),
+          ]);
+          for (const escrow of userEscrows) {
+            const isClient =
+              escrow.creator?.toLowerCase() === wallet.address!.toLowerCase();
+            const isFreelancer =
+              escrow.freelancer?.toLowerCase() ===
+              wallet.address!.toLowerCase();
 
-              const isClient =
-                escrow.creator?.toLowerCase() === wallet.address!.toLowerCase();
-              const isFreelancer =
-                escrow.freelancer?.toLowerCase() ===
-                wallet.address!.toLowerCase();
-
-              if (isClient) {
-                userAsClient++;
-                userSpent += BigInt(escrow.amount || "0");
-              }
-              if (isFreelancer) {
-                userAsFreelancer++;
-                userEarned += BigInt(escrow.paid_amount || "0");
-              }
-
-              if (escrow.status === 1) userActive++;
-              else if (escrow.status === 2) userCompleted++;
-            } catch {
-              continue;
+            if (isClient) {
+              userAsClient++;
+              userSpent += BigInt(escrow.amount || "0");
             }
+            if (isFreelancer) {
+              userAsFreelancer++;
+              userEarned += BigInt(escrow.paid_amount || "0");
+            }
+
+            if (escrow.status === 1) userActive++;
+            else if (escrow.status === 2) userCompleted++;
           }
 
           const [ratingData, reputation] = await Promise.all([
