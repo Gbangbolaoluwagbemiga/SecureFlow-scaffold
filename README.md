@@ -324,7 +324,7 @@ All `/v1` routes expect `Authorization: Bearer <API_SECRET>` when it's set.
 ## Testing
 
 ```bash
-cargo test -p secureflow                                   # 27 contract tests (incl. a mock Blend pool)
+cargo test -p secureflow                                   # 28 contract tests (incl. a mock Blend pool)
 cargo clippy -p secureflow --all-targets -- -D warnings    # lint the contract
 npm run lint && npx prettier . --check && npm run build    # frontend
 (cd backend && npx tsc --noEmit -p .)                      # backend
@@ -358,10 +358,13 @@ contracts/secureflow/src/
   refund_system.rs       refunds, deadlines, overdue disputes
   marketplace.rs         applications, hiring
   verification.rs        identity attestations
-  ratings.rs  evidence.rs  admin.rs  events.rs  test.rs
+  ratings.rs  evidence.rs  admin.rs  events.rs
+  blend.rs               Blend v2 pool types and supply/withdraw calls
+  idle_yield.rs          idle-fund positions, yield split, keeper entry point
+  test.rs
 
 src/                     React app
-  pages/                 Home, Jobs, Create, Dashboard, Freelancer, Approvals, Admin, Analytics
+  pages/                 Home, Jobs, Create, Dashboard, Freelancer, Approvals, Admin (tabbed: settings, tokens, arbiters, disputes, danger zone), Analytics
   components/autopilot/  hand-over dialog, panel and decision log, badges
   components/verification/  Verified badge, identity card
   lib/web3/              contract service, error messages, event indexer, wallet signing
