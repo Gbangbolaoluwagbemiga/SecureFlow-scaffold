@@ -166,16 +166,18 @@ export function YieldPanel({
   if (info.optedIn && active) {
     return (
       <div className={shell}>
-        <div className="min-w-0 space-y-1">
+        <div className="min-w-0 space-y-1.5">
           <Pill live />
-          <p className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">
+          <div className="flex flex-wrap items-baseline gap-x-2">
+            <span className="text-xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
+              +{xlm(soFar)} <span className="text-sm font-semibold">XLM</span>
+            </span>
+            <span className="text-xs text-muted-foreground">earned so far</span>
+          </div>
+          <p className="text-sm font-medium text-foreground/80">
             {info.principal > 0n
               ? `${xlm(info.principal)} XLM earning in Blend`
               : "Reinvesting after a payment"}
-            <span className="font-normal text-muted-foreground">
-              {" "}
-              · +{xlm(soFar)} XLM so far
-            </span>
           </p>
           <p className="text-xs text-muted-foreground">
             {isFreelancer
