@@ -41,7 +41,18 @@ pub const EMERGENCY_REFUND_DELAY_LEDGERS: u32 = 30 * DAY_IN_LEDGERS;
 /// which is not about any one milestone.
 pub const OVERDUE_RESOLUTION_INDEX: u32 = u32::MAX;
 
-pub const CONTRACT_VERSION: &str = "2.2.0-indexes";
+pub const CONTRACT_VERSION: &str = "2.3.0-yield";
+
+/// Default share of an escrow's yield paid to the freelancer on a completed
+/// job (20%). The client funded the capital, so they keep the rest.
+pub const DEFAULT_YIELD_FREELANCER_SHARE_BP: u32 = 2_000;
+
+/// Real cash that must stand behind the pool's rounding. The pool rounds each
+/// deposit and withdrawal down by a stroop or two; that dust is paid from the
+/// escrow's held fee or the platform's earned fees, so an escrow may opt in
+/// only while one of them holds at least this much, and fee withdrawals leave
+/// this much behind while a yield pool is configured.
+pub const YIELD_DUST_RESERVE: i128 = 1_000;
 
 /// Most escrows one `get_escrows` call returns. Each is one ledger read, and a
 /// simulation may read at most ~200 entries.
@@ -305,6 +316,26 @@ pub enum SecureFlowError {
     WalletBoundToOtherIdentity = 2803,
     /// This wallet has no verification to revoke.
     NotVerified = 2804,
+
+    // ── Yield on idle escrow funds (2900-2999) ───────────────────────────────
+    /// No lending pool is configured for this escrow's token.
+    YieldNotConfigured = 2900,
+    /// The escrow has not opted in to earning yield.
+    YieldNotOptedIn = 2901,
+    /// Only a pending or in-progress escrow can start earning.
+    YieldEscrowNotActive = 2902,
+    /// Neither the escrow's held fee nor the platform's earned fees can cover
+    /// the pool's rounding yet, so the principal couldn't be guaranteed whole.
+    YieldFeeReserveTooSmall = 2903,
+    /// There is no yield to claim on this escrow.
+    YieldNothingToClaim = 2904,
+    /// Yield is paid out once the escrow is finished.
+    YieldEscrowNotFinal = 2905,
+    /// The lending pool refused the call (paused, out of liquidity or
+    /// changed). Funds stay where they were; the action can be retried.
+    YieldPoolCallFailed = 2906,
+    /// A freelancer share above 100% was requested.
+    YieldShareTooHigh = 2907,
 }
 
 impl From<SecureFlowError> for soroban_sdk::Error {
@@ -474,6 +505,34 @@ pub struct EvidenceEntry {
     pub submitted_at: u64,
 }
 
+/// Funds an escrow has supplied to a lending pool. `b_tokens` is the escrow's
+/// exact share of the pool, in the pool's own units, so interest accrues to it
+/// with no bookkeeping of ours.
+#[derive(Clone, Debug)]
+#[contracttype]
+pub struct YieldPosition {
+    pub pool: Address,
+    pub token: Address,
+    pub b_tokens: i128,
+    /// Escrow money supplied and not yet withdrawn.
+    pub principal: i128,
+}
+
+/// What the app shows about an escrow's yield.
+#[derive(Clone, Debug)]
+#[contracttype]
+pub struct YieldInfo {
+    pub opted_in: bool,
+    pub available: bool,
+    /// Escrow money currently earning.
+    pub principal: i128,
+    /// What that money is worth now, interest included.
+    pub value: i128,
+    /// Yield already brought back and held for the escrow.
+    pub earned: i128,
+    pub freelancer_share_bp: u32,
+}
+
 // ─── Storage keys ────────────────────────────────────────────────────────────
 
 #[derive(Clone)]
@@ -500,6 +559,11 @@ pub enum DataKey {
     EscrowedAmount(Address),
     /// token -> fees earned and not yet withdrawn.
     TotalFeesByToken(Address),
+    /// token -> Blend pool idle escrow funds may be supplied to.
+    YieldPool(Address),
+    /// Share of an escrow's yield paid to the freelancer on a completed job,
+    /// in basis points.
+    YieldFreelancerShareBp,
 
     // ── Persistent: per escrow ──
     Escrow(u32),
@@ -518,6 +582,12 @@ pub enum DataKey {
     Evidence(u32, u32),
     /// Arbiters who have voted in the escrow's current dispute round.
     DisputeVoters(u32),
+    /// The client chose to let this escrow's idle funds earn.
+    YieldOptIn(u32),
+    /// What this escrow currently has supplied to a lending pool.
+    YieldPosition(u32),
+    /// Yield earned by this escrow and not yet paid out.
+    YieldEarned(u32),
     /// (escrow, milestone, `freelancer_amount`, `client_amount`) -> voters.
     /// Keyed by the split, so quorum means N arbiters agreeing on one outcome
     /// rather than N arbiters turning up.

@@ -139,11 +139,19 @@ pub fn withdraw_fees(env: &Env, token: Option<Address>, caller: Address) -> SfRe
     }
     let token_addr = escrow_core::token_address(env, token.as_ref());
     let key = DataKey::TotalFeesByToken(token_addr.clone());
-    let fees: i128 = env.storage().instance().get(&key).unwrap_or(0);
+    let held: i128 = env.storage().instance().get(&key).unwrap_or(0);
+    // While idle escrow funds can earn in a pool, a small reserve of earned
+    // fees stays behind to pay the pool's rounding in real cash.
+    let keep = if crate::idle_yield::pool_configured(env, &token_addr) {
+        crate::storage_types::YIELD_DUST_RESERVE
+    } else {
+        0
+    };
+    let fees = held - keep;
     if fees <= 0 {
         return Err(SecureFlowError::NoFeesToWithdraw);
     }
-    env.storage().instance().set(&key, &0i128);
+    env.storage().instance().set(&key, &keep);
     bump_instance(env);
     escrow_core::pay_out(env, token.as_ref(), &caller, fees)?;
     events::FeesWithdrawn {
@@ -379,6 +387,10 @@ pub fn delete_escrow(env: &Env, escrow_id: u32) -> SfResult<()> {
     // their totals for the record but have returned the money, so only a live
     // status could still be holding principal — and that was refused above.
     if escrow.status == EscrowStatus::Released && escrow.total_amount != escrow.paid_amount {
+        return Err(SecureFlowError::FundsStillLocked);
+    }
+    // Supplied funds or unclaimed yield are still money owed to someone.
+    if !crate::idle_yield::is_empty(env, escrow_id) {
         return Err(SecureFlowError::FundsStillLocked);
     }
 

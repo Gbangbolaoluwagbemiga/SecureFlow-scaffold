@@ -765,7 +765,10 @@ fn open_jobs_and_applications_index_follow_the_job() {
     assert_eq!(t.sf.get_open_jobs(), vec![&t.env, open]); // direct jobs aren't listed
 
     t.sf.apply_to_job(&open, &s(&t.env, "me"), &1, &t.freelancer);
-    assert_eq!(t.sf.get_freelancer_applications(&t.freelancer), vec![&t.env, open]);
+    assert_eq!(
+        t.sf.get_freelancer_applications(&t.freelancer),
+        vec![&t.env, open]
+    );
 
     t.sf.accept_freelancer(&open, &t.freelancer, &t.client);
     assert!(t.sf.get_open_jobs().is_empty()); // hired: no longer open
@@ -786,9 +789,396 @@ fn open_jobs_and_applications_index_follow_the_job() {
     for i in 0..51u32 {
         too_many.push_back(i);
     }
-    assert_eq!(t.sf.try_get_escrows(&too_many), Err(Ok(err(SecureFlowError::InvalidParameter))));
+    assert_eq!(
+        t.sf.try_get_escrows(&too_many),
+        Err(Ok(err(SecureFlowError::InvalidParameter)))
+    );
 
     // Backfill is idempotent and owner-only.
     assert_eq!(t.sf.rebuild_indexes(&1, &10), 0);
-    assert_eq!(t.sf.get_freelancer_applications(&t.freelancer), vec![&t.env, open]);
+    assert_eq!(
+        t.sf.get_freelancer_applications(&t.freelancer),
+        vec![&t.env, open]
+    );
+}
+
+// ─── Yield on idle funds ─────────────────────────────────────────────────────
+
+mod mock_pool {
+    //! Behaves like a Blend pool for what `SecureFlow` uses: supply mints
+    //! b-tokens at `b_rate` (rounded down), withdraw burns them (rounded up).
+    //! Raising `b_rate` is interest; `set_fail` makes every call refuse.
+    use crate::blend::{Positions, Request, Reserve, ReserveConfig, ReserveData, SCALAR_12};
+    use soroban_sdk::{contract, contractimpl, contracttype, token, Address, Env, Map, Vec};
+
+    #[contracttype]
+    enum K {
+        BRate,
+        Fail,
+        BTokens(Address),
+    }
+
+    #[contract]
+    pub struct MockPool;
+
+    #[contractimpl]
+    impl MockPool {
+        pub fn set_b_rate(env: Env, b_rate: i128) {
+            env.storage().instance().set(&K::BRate, &b_rate);
+        }
+        pub fn set_fail(env: Env, fail: bool) {
+            env.storage().instance().set(&K::Fail, &fail);
+        }
+        pub fn get_reserve(env: Env, asset: Address) -> Reserve {
+            Reserve {
+                asset,
+                config: ReserveConfig {
+                    c_factor: 0,
+                    decimals: 7,
+                    enabled: true,
+                    index: 0,
+                    l_factor: 0,
+                    max_util: 0,
+                    r_base: 0,
+                    r_one: 0,
+                    r_three: 0,
+                    r_two: 0,
+                    reactivity: 0,
+                    supply_cap: i128::MAX,
+                    util: 0,
+                },
+                data: ReserveData {
+                    b_rate: rate(&env),
+                    b_supply: 0,
+                    backstop_credit: 0,
+                    d_rate: SCALAR_12,
+                    d_supply: 0,
+                    ir_mod: 0,
+                    last_time: 0,
+                },
+                scalar: 10_000_000,
+            }
+        }
+        pub fn get_positions(env: Env, address: Address) -> Positions {
+            let mut supply = Map::new(&env);
+            let bt: i128 = env
+                .storage()
+                .instance()
+                .get(&K::BTokens(address))
+                .unwrap_or(0);
+            if bt > 0 {
+                supply.set(0, bt);
+            }
+            Positions {
+                collateral: Map::new(&env),
+                liabilities: Map::new(&env),
+                supply,
+            }
+        }
+        pub fn submit(
+            env: Env,
+            from: Address,
+            spender: Address,
+            to: Address,
+            requests: Vec<Request>,
+        ) -> Positions {
+            assert!(
+                !env.storage().instance().get(&K::Fail).unwrap_or(false),
+                "pool refuses"
+            );
+            from.require_auth();
+            spender.require_auth();
+            let me = env.current_contract_address();
+            let key = K::BTokens(from.clone());
+            let mut bt: i128 = env.storage().instance().get(&key).unwrap_or(0);
+            for r in requests.iter() {
+                let tok = token::TokenClient::new(&env, &r.address);
+                match r.request_type {
+                    0 => {
+                        tok.transfer(&spender, &me, &r.amount);
+                        bt += r.amount * SCALAR_12 / rate(&env);
+                    }
+                    1 => {
+                        let burn = (r.amount * SCALAR_12 + rate(&env) - 1) / rate(&env);
+                        assert!(burn <= bt, "burning more than held");
+                        bt -= burn;
+                        tok.transfer(&me, &to, &r.amount);
+                    }
+                    _ => panic!("unsupported request"),
+                }
+            }
+            env.storage().instance().set(&key, &bt);
+            Self::get_positions(env, from)
+        }
+    }
+
+    fn rate(env: &Env) -> i128 {
+        env.storage().instance().get(&K::BRate).unwrap_or(SCALAR_12)
+    }
+}
+
+use mock_pool::{MockPool, MockPoolClient};
+
+fn with_pool<'a>(t: &Setup<'a>) -> MockPoolClient<'a> {
+    let id = t.env.register(MockPool, ());
+    let pool = MockPoolClient::new(&t.env, &id);
+    // b_rate 1.1: a pool that has already earned, so deposits round.
+    pool.set_b_rate(&1_100_000_000_000);
+    // The pool's own liquidity, which pays the interest.
+    StellarAssetClient::new(&t.env, &t.token.address).mint(&id, &1_000_000_000_000);
+    t.sf.set_yield_pool(&Some(t.token.address.clone()), &Some(id.clone()));
+    pool
+}
+
+impl Setup<'_> {
+    /// With funds in a pool the cash alone can't cover what's owed; cash plus
+    /// what the pool holds for this contract must.
+    fn assert_covered(&self, ids: &[u32]) {
+        let token = Some(self.token.address.clone());
+        let cash = self.token.balance(&self.sf.address);
+        let supplied: i128 = ids.iter().map(|id| self.sf.get_yield_info(id).value).sum();
+        let owed = self.sf.get_escrowed_amount(&token);
+        let fees = self.sf.get_withdrawable_fees(&token);
+        // The pool rounds each deposit down by up to a stroop or two; that
+        // dust is covered by the escrow's held fee when the money comes back.
+        let dust = 2 * ids.len() as i128;
+        assert!(
+            cash + supplied + dust >= owed + fees,
+            "cash {cash} + supplied {supplied} < owed {owed} + fees {fees}"
+        );
+    }
+}
+
+#[test]
+fn yield_supplies_idle_funds_and_pays_milestones_whole() {
+    let t = setup();
+    let pool = with_pool(&t);
+    let id = t.direct(&[600_000, 400_000]);
+
+    t.sf.set_yield_opt_in(&id, &true, &t.client);
+    let info = t.sf.get_yield_info(&id);
+    assert!(info.opted_in && info.available);
+    assert_eq!(info.principal, 1_000_000);
+    t.assert_covered(&[id]);
+
+    // Interest: the pool's rate rises 10%.
+    pool.set_b_rate(&1_210_000_000_000);
+    assert!(t.sf.get_yield_info(&id).value > 1_090_000);
+
+    t.sf.start_work(&id, &t.freelancer);
+    let before = t.token.balance(&t.freelancer);
+    t.deliver_and_approve(id, 0);
+    // Paid exactly the milestone, from cash brought home first.
+    assert_eq!(t.token.balance(&t.freelancer) - before, 600_000);
+    let info = t.sf.get_yield_info(&id);
+    assert_eq!(info.principal, 0, "everything came home before the payout");
+    assert!(
+        info.earned >= 99_000,
+        "interest held for the escrow: {}",
+        info.earned
+    );
+    t.assert_solvent();
+
+    // A keeper puts the rest back to work.
+    assert_eq!(t.sf.invest_idle(&id), 400_000);
+    t.assert_covered(&[id]);
+    t.deliver_and_approve(id, 1);
+    assert_eq!(t.sf.get_escrow(&id).unwrap().status, EscrowStatus::Released);
+    t.assert_solvent();
+}
+
+#[test]
+fn yield_is_claimed_once_with_the_freelancer_share() {
+    let t = setup();
+    let pool = with_pool(&t);
+    let id = t.direct(&[1_000_000]);
+    t.sf.set_yield_opt_in(&id, &true, &t.client);
+    pool.set_b_rate(&1_320_000_000_000); // +20%
+
+    // Not before the job is finished.
+    assert_eq!(
+        t.sf.try_claim_yield(&id),
+        Err(Ok(err(SecureFlowError::YieldEscrowNotFinal)))
+    );
+
+    t.sf.start_work(&id, &t.freelancer);
+    t.deliver_and_approve(id, 0);
+    let earned = t.sf.get_yield_info(&id).earned;
+    assert!(earned > 190_000);
+
+    let (c0, f0) = (t.token.balance(&t.client), t.token.balance(&t.freelancer));
+    let (to_client, to_freelancer) = t.sf.claim_yield(&id);
+    assert_eq!(to_client + to_freelancer, earned);
+    assert_eq!(to_freelancer, earned * 2_000 / 10_000, "20% default share");
+    assert_eq!(t.token.balance(&t.client) - c0, to_client);
+    assert_eq!(t.token.balance(&t.freelancer) - f0, to_freelancer);
+    t.assert_solvent();
+
+    // Exactly once.
+    assert_eq!(
+        t.sf.try_claim_yield(&id),
+        Err(Ok(err(SecureFlowError::YieldNothingToClaim)))
+    );
+}
+
+#[test]
+fn cancelled_job_returns_principal_and_all_yield_to_the_client() {
+    let t = setup();
+    let pool = with_pool(&t);
+    let id = t.direct(&[1_000_000]);
+    let start = t.token.balance(&t.client);
+    t.sf.set_yield_opt_in(&id, &true, &t.client);
+    pool.set_b_rate(&1_210_000_000_000);
+
+    t.sf.cancel_job(&id, &t.client);
+    t.assert_solvent();
+    let (to_client, to_freelancer) = t.sf.claim_yield(&id);
+    assert_eq!(to_freelancer, 0, "no work, no freelancer share");
+    assert!(to_client > 0);
+    // Budget and fee back (nobody applied, no penalty), plus the interest.
+    assert_eq!(t.token.balance(&t.client), start + 1_025_000 + to_client);
+    t.assert_solvent();
+}
+
+#[test]
+fn rounding_dust_comes_from_the_fee_never_the_principal() {
+    let t = setup();
+    let _pool = with_pool(&t); // rate 1.1, no interest added
+    let id = t.direct(&[1_000_001]);
+    let fee_before = t.sf.get_escrow(&id).unwrap().platform_fee;
+    t.sf.set_yield_opt_in(&id, &true, &t.client);
+
+    // Brought straight back: the pool's rounding loses a stroop or two.
+    t.sf.set_yield_opt_in(&id, &false, &t.client);
+    let escrow = t.sf.get_escrow(&id).unwrap();
+    assert!(escrow.platform_fee < fee_before && escrow.platform_fee >= fee_before - 5);
+    assert_eq!(escrow.total_amount, 1_000_001, "principal untouched");
+    t.assert_solvent();
+
+    // And the freelancer still gets every stroop.
+    t.sf.start_work(&id, &t.freelancer);
+    let before = t.token.balance(&t.freelancer);
+    t.deliver_and_approve(id, 0);
+    assert_eq!(t.token.balance(&t.freelancer) - before, 1_000_001);
+    t.assert_solvent();
+}
+
+#[test]
+fn a_refusing_pool_delays_a_payout_and_loses_nothing() {
+    let t = setup();
+    let pool = with_pool(&t);
+    let id = t.direct(&[1_000_000]);
+    t.sf.set_yield_opt_in(&id, &true, &t.client);
+    t.sf.start_work(&id, &t.freelancer);
+    t.sf.submit_milestone(&id, &0, &s(&t.env, "done"), &t.freelancer);
+
+    pool.set_fail(&true);
+    assert_eq!(
+        t.sf.try_approve_milestone(&id, &0, &t.client),
+        Err(Ok(err(SecureFlowError::YieldPoolCallFailed)))
+    );
+    // Nothing moved: still supplied, still owed, milestone still waiting.
+    assert_eq!(t.sf.get_yield_info(&id).principal, 1_000_000);
+    t.assert_covered(&[id]);
+
+    pool.set_fail(&false);
+    let before = t.token.balance(&t.freelancer);
+    t.sf.approve_milestone(&id, &0, &t.client);
+    assert_eq!(t.token.balance(&t.freelancer) - before, 1_000_000);
+    t.assert_solvent();
+}
+
+#[test]
+fn yield_guards() {
+    let t = setup();
+    let id = t.direct(&[1_000_000]);
+    // No pool for the token yet.
+    assert_eq!(
+        t.sf.try_set_yield_opt_in(&id, &true, &t.client),
+        Err(Ok(err(SecureFlowError::YieldNotConfigured)))
+    );
+    let pool = with_pool(&t);
+    // Only the client.
+    assert_eq!(
+        t.sf.try_set_yield_opt_in(&id, &true, &t.freelancer),
+        Err(Ok(err(SecureFlowError::OnlyDepositor)))
+    );
+    // Not opted in: nothing to invest.
+    assert_eq!(
+        t.sf.try_invest_idle(&id),
+        Err(Ok(err(SecureFlowError::YieldNotOptedIn)))
+    );
+    // Share above 100%.
+    assert_eq!(
+        t.sf.try_set_yield_freelancer_share(&10_001),
+        Err(Ok(err(SecureFlowError::YieldShareTooHigh)))
+    );
+
+    // Earned yield is owed, so the owner can't sweep it as surplus...
+    t.sf.set_yield_opt_in(&id, &true, &t.client);
+    pool.set_b_rate(&1_210_000_000_000);
+    t.sf.set_yield_opt_in(&id, &false, &t.client);
+    let earned = t.sf.get_yield_info(&id).earned;
+    assert!(earned > 0);
+    assert_eq!(
+        t.sf.try_withdraw_stuck_funds(&t.token.address, &t.owner, &earned),
+        Err(Ok(err(SecureFlowError::InsufficientWithdrawable)))
+    );
+    // ...and an escrow holding it can't be deleted.
+    t.sf.cancel_job(&id, &t.client);
+    assert_eq!(
+        t.sf.try_delete_escrow(&id),
+        Err(Ok(err(SecureFlowError::FundsStillLocked)))
+    );
+    t.sf.claim_yield(&id);
+    t.sf.delete_escrow(&id);
+    t.assert_solvent();
+}
+
+#[test]
+fn zero_fee_platform_still_returns_principal_whole() {
+    let t = setup();
+    let _pool = with_pool(&t); // rate 1.1: every round trip loses dust
+
+    // A 0% platform with no fees earned yet can't cover rounding: refused.
+    t.sf.set_platform_fee_bp(&0);
+    let early = t.direct(&[1_000_001]);
+    assert_eq!(
+        t.sf.try_set_yield_opt_in(&early, &true, &t.client),
+        Err(Ok(err(SecureFlowError::YieldFeeReserveTooSmall)))
+    );
+
+    // Earlier jobs have earned the platform some fees.
+    t.sf.set_platform_fee_bp(&FEE_BP);
+    let paid = t.direct(&[1_000_000]);
+    t.sf.start_work(&paid, &t.freelancer);
+    t.deliver_and_approve(paid, 0);
+    let token = Some(t.token.address.clone());
+    let fees_before = t.sf.get_withdrawable_fees(&token);
+    assert!(fees_before >= 1_000);
+
+    // Back to 0%: a new job holds no fee, but the platform's fees cover dust.
+    t.sf.set_platform_fee_bp(&0);
+    let id = t.direct(&[1_000_001]);
+    assert_eq!(t.sf.get_escrow(&id).unwrap().platform_fee, 0);
+    t.sf.set_yield_opt_in(&id, &true, &t.client);
+    t.sf.set_yield_opt_in(&id, &false, &t.client);
+    let fees_after = t.sf.get_withdrawable_fees(&token);
+    assert!(
+        fees_before - fees_after > 0 && fees_before - fees_after <= 5,
+        "platform paid the dust: {fees_before} -> {fees_after}"
+    );
+    t.assert_solvent();
+
+    // The freelancer is paid every stroop, from real cash.
+    t.sf.start_work(&id, &t.freelancer);
+    let before = t.token.balance(&t.freelancer);
+    t.deliver_and_approve(id, 0);
+    assert_eq!(t.token.balance(&t.freelancer) - before, 1_000_001);
+    t.assert_solvent();
+
+    // Withdrawing fees leaves the rounding reserve behind.
+    t.sf.withdraw_fees(&token, &t.fee_collector);
+    assert_eq!(t.sf.get_withdrawable_fees(&token), 1_000);
+    t.assert_solvent();
 }

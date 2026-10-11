@@ -29,6 +29,7 @@ pub fn emergency_refund_after_deadline(
     depositor.require_auth();
     let mut escrow = core::load_escrow(env, escrow_id)?;
     core::require_depositor(&escrow, &depositor)?;
+    crate::idle_yield::release(env, escrow_id, &mut escrow)?;
 
     // The old check compared a ledger number against deadline + 2,592,000
     // SECONDS treated as ledgers — about 150 days, not 30.
@@ -191,6 +192,7 @@ fn overdue_resolution(
         return Err(SecureFlowError::InvalidEscrowStatus);
     }
     core::require_arbiter_for(env, &escrow, escrow_id, &arbiter)?;
+    crate::idle_yield::release(env, escrow_id, &mut escrow)?;
     let beneficiary = escrow
         .beneficiary
         .clone()

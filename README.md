@@ -4,7 +4,7 @@
 
 # SecureFlow
 
-**Milestone escrow for freelance work on Stellar, with an AI job manager and verified freelancers.**
+**Milestone escrow for freelance work on Stellar, with an AI job manager, verified freelancers, and idle funds that earn.**
 
 Clients lock the budget in a Soroban contract before work starts. Freelancers are paid per milestone the moment it's approved. Disputes go to arbiters who split the money on-chain. A client can hand the whole job to **Autopilot**, which hires, reviews and escalates for them.
 
@@ -94,6 +94,17 @@ Autopilot runs on xAI **Grok** when `XAI_API_KEY` is set and falls back to **Gro
 
 ---
 
+## Productive escrow: idle funds earn
+
+Money waiting for a milestone doesn't have to sit idle. A client can opt a job in, and its unpaid budget is supplied to [Blend](https://www.blend.capital/), Stellar's lending market, where it earns interest until it's needed.
+
+- **Payouts come first.** Before any money leaves a job (payout, refund, cancellation, withdrawal or dispute ruling), its whole position is withdrawn back to cash, so every payment runs on cash exactly as before. If the pool can't pay out at that moment, the action fails and can be retried: a pool can delay a payout, never lose it.
+- **Principal always comes back whole.** Blend rounds each deposit and withdrawal down by a stroop or two. That dust is paid in real cash from the yield the job already earned, then its held fee, then the platform's earned fees, never from another client's money. A small fee reserve stays behind on withdrawals so the cover is always there.
+- **Yield is held for the job, then claimed.** Interest is counted as owed (the owner's surplus sweep can't touch it), and once the job is finished either party can claim it: the freelancer gets a bonus share on a completed job (default 20%), and the client gets the rest, or all of it if the job was cancelled.
+- **Kept working automatically.** After a payout, the backend's keeper calls the public `invest_idle`, which can only move a job's own unpaid funds into its configured pool, so the rest of the budget goes back to earning without anyone signing anything.
+
+Tested end to end against Blend's live testnet pool (`TestnetV2`), including at a 0% platform fee.
+
 ## Verified freelancers
 
 Freelancers can verify their identity once with [Didit](https://didit.me) (ID document + liveness). On approval, the backend's verifier key attests the wallet on-chain:
@@ -136,9 +147,9 @@ Notifications come from contract events: the frontend indexes them from RPC and 
 
 ## Deployed contract
 
-| Network         | Contract ID                                                | Version         |
-| --------------- | ---------------------------------------------------------- | --------------- |
-| Stellar testnet | `CAJAUKTFKRYZCIFCQOGNZJMCJITC574Z5DUFRINMXXR7VIYKRBEFPS7H` | `2.2.0-indexes` |
+| Network         | Contract ID                                                | Version       |
+| --------------- | ---------------------------------------------------------- | ------------- |
+| Stellar testnet | `CAJAUKTFKRYZCIFCQOGNZJMCJITC574Z5DUFRINMXXR7VIYKRBEFPS7H` | `2.3.0-yield` |
 
 Call `version()` to check what's deployed. The contract is upgradeable by its owner (`upgrade(new_wasm_hash)`), so the ID stays stable across releases.
 
@@ -223,6 +234,7 @@ Then set the new ID in `VITE_SECUREFLOW_CONTRACT_ID` and `SECUREFLOW_CONTRACT_ID
 | `AUTOPILOT_SECRET_KEY`                                                                        | for Autopilot    | The agent's own account. Use a dedicated key, never the owner's                        |
 | `AUTOPILOT_DATA_DIR`                                                                          | in production    | Where Autopilot keeps its state; mount a persistent volume here                        |
 | `AUTOPILOT_MODEL`, `AUTOPILOT_VERIFIED_EDGE`, `AUTOPILOT_HIRE_THRESHOLD`, `AUTOPILOT_POLL_MS` | no               | Overrides (defaults: provider default model, 10, 60, 20000 ms)                         |
+| `YIELD_KEEPER_MS`                                                                             | no               | How often the keeper reinvests opted-in jobs' idle funds (default 120000 ms)           |
 | `DIDIT_API_KEY`, `DIDIT_WORKFLOW_ID`, `DIDIT_WEBHOOK_SECRET`                                  | for verification | From the Didit console; give the API key only Sessions-write and Decisions-read access |
 | `DIDIT_CALLBACK_URL`                                                                          | no               | Where Didit returns the user after verifying                                           |
 | `IDENTITY_HASH_SALT`                                                                          | for verification | Long random secret. Never change it once live: it would let people verify twice        |
@@ -263,6 +275,7 @@ After an upgrade that adds indexes, backfill them with `rebuild_indexes --from_i
 - [ ] Gasless, verifier and Autopilot accounts funded, and separate from the owner key
 - [ ] Didit webhook reaches the backend; a test verification shows the Verified tag
 - [ ] Supabase tables have RLS enabled
+- [ ] `set_yield_pool` points native XLM (and any other token) at its Blend pool, and the backend keeper is running
 
 ---
 
@@ -281,6 +294,7 @@ Every failure returns a specific error code, which the app translates into plain
 | Disputes     | `resolve_dispute`, `raise_overdue_dispute`, `arbiter_approve_refund`, `arbiter_award_freelancer`, `submit_evidence`                                           |
 | Reputation   | `submit_rating`, `submit_client_rating`, `get_average_rating`, `get_badge`, `get_reputation`                                                                  |
 | Verification | `set_verifier`, `attest_verification`, `revoke_verification`, `is_verified`                                                                                   |
+| Yield        | `set_yield_opt_in`, `invest_idle`, `claim_yield`, `get_yield_info`; owner: `set_yield_pool`, `set_yield_freelancer_share`                                     |
 | Reads        | `get_escrow`, `get_escrows` (batch ≤ 50), `get_open_jobs`, `get_freelancer_applications`, `get_milestones`, `get_applications_page`                           |
 | Admin        | pause/unpause, fees and fee collector, token whitelist/blacklist, arbiters, `withdraw_fees`, `delete_escrow`, `upgrade`, `rebuild_indexes`                    |
 
@@ -310,7 +324,7 @@ All `/v1` routes expect `Authorization: Bearer <API_SECRET>` when it's set.
 ## Testing
 
 ```bash
-cargo test -p secureflow                                   # 20 contract tests
+cargo test -p secureflow                                   # 27 contract tests (incl. a mock Blend pool)
 cargo clippy -p secureflow --all-targets -- -D warnings    # lint the contract
 npm run lint && npx prettier . --check && npm run build    # frontend
 (cd backend && npx tsc --noEmit -p .)                      # backend

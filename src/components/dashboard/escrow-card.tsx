@@ -26,6 +26,7 @@ import { MilestoneNegotiation } from "@/components/milestone-negotiation";
 import { JobManagement } from "@/components/job-management";
 import { AutopilotPanel } from "@/components/autopilot/autopilot-panel";
 import { AutopilotBadge } from "@/components/autopilot/autopilot-badge";
+import { YieldPanel } from "@/components/yield/yield-panel";
 import { EvidenceSubmissionButton } from "@/components/evidence-submission-button";
 import { ViewEvidenceButton } from "@/components/view-evidence-button";
 import { parseAttachment } from "@/lib/utils";
@@ -318,6 +319,14 @@ export function EscrowCard({
                       amount: m.amount,
                       status: m.status,
                     }))}
+                  />
+                )}
+                {(escrow.isClient || escrow.isFreelancer) && (
+                  <YieldPanel
+                    escrowId={Number(escrow.id)}
+                    status={escrow.status}
+                    isClient={escrow.isClient || false}
+                    isFreelancer={escrow.isFreelancer || false}
                   />
                 )}
                 <div className="space-y-3">

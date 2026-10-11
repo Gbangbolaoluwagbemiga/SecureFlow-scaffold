@@ -205,7 +205,9 @@ fn grow(env: &Env, escrow: &mut EscrowData, depositor: &Address, amount: i128) -
 /// Shrink the job by `amount`, returning it plus its fee share. Mutates
 /// `escrow` totals; the caller saves (before or after — the transfer here is
 /// to the depositor, who already authorised the call).
-fn shrink(env: &Env, escrow: &mut EscrowData, amount: i128) -> SfResult<()> {
+fn shrink(env: &Env, escrow_id: u32, escrow: &mut EscrowData, amount: i128) -> SfResult<()> {
+    // Money is about to leave: bring any supplied funds home first.
+    crate::idle_yield::release(env, escrow_id, escrow)?;
     let fee = core::fee_share(escrow, amount)?;
     let refund = add(amount, fee)?;
     escrow.total_amount = sub(escrow.total_amount, amount)?;
@@ -296,7 +298,7 @@ pub fn remove_milestone(
     escrow.milestone_count = last;
 
     let old_total = escrow.total_amount;
-    shrink(env, &mut escrow, removed.amount)?;
+    shrink(env, escrow_id, &mut escrow, removed.amount)?;
     core::save_escrow(env, escrow_id, &escrow);
     emit_funds_updated(env, escrow_id, &escrow, old_total);
     Ok(())
@@ -323,7 +325,7 @@ pub fn set_milestones(
     if new_total > old_total {
         grow(env, &mut escrow, &depositor, sub(new_total, old_total)?)?;
     } else if new_total < old_total {
-        shrink(env, &mut escrow, sub(old_total, new_total)?)?;
+        shrink(env, escrow_id, &mut escrow, sub(old_total, new_total)?)?;
     }
 
     for i in 0..escrow.milestone_count {
@@ -402,7 +404,7 @@ pub fn withdraw_job_funds(
     }
 
     let old_total = escrow.total_amount;
-    shrink(env, &mut escrow, withdraw_amount)?;
+    shrink(env, escrow_id, &mut escrow, withdraw_amount)?;
     m.amount = sub(m.amount, withdraw_amount)?;
     core::save_milestone(env, escrow_id, milestone_index, &m);
     if after_arbitration {
@@ -449,6 +451,7 @@ fn cancellation_penalty(env: &Env, escrow_id: u32, total: i128) -> SfResult<i128
 /// fee share for them is earned.
 pub fn cancel_job(env: &Env, escrow_id: u32, depositor: Address) -> SfResult<()> {
     let mut escrow = load_editable(env, escrow_id, &depositor)?;
+    crate::idle_yield::release(env, escrow_id, &mut escrow)?;
 
     let unpaid = sub(escrow.total_amount, escrow.paid_amount)?;
     let penalty = cancellation_penalty(env, escrow_id, unpaid)?;

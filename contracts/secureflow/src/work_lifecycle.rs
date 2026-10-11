@@ -120,6 +120,7 @@ pub fn approve_milestone(
     caller.require_auth();
     let mut escrow = load_active(env, escrow_id)?;
     core::require_depositor_or_manager(env, &escrow, escrow_id, &caller)?;
+    crate::idle_yield::release(env, escrow_id, &mut escrow)?;
     let beneficiary = beneficiary_of(&escrow)?;
     let mut m = core::load_milestone(env, &escrow, escrow_id, milestone_index)?;
     if m.status != MilestoneStatus::Submitted {
@@ -288,6 +289,7 @@ pub fn approve_milestone_proposal(
     admin::require_not_paused(env)?;
     let mut escrow = core::load_escrow(env, escrow_id)?;
     core::require_depositor(&escrow, &depositor)?;
+    crate::idle_yield::release(env, escrow_id, &mut escrow)?;
     if escrow.status != EscrowStatus::InProgress && escrow.status != EscrowStatus::Pending {
         return Err(SecureFlowError::InvalidEscrowStatus);
     }
@@ -436,6 +438,7 @@ pub fn resolve_dispute(
 ) -> SfResult<()> {
     arbiter.require_auth();
     let mut escrow = core::load_escrow(env, escrow_id)?;
+    crate::idle_yield::release(env, escrow_id, &mut escrow)?;
     if escrow.status != EscrowStatus::Disputed {
         return Err(SecureFlowError::InvalidEscrowStatus);
     }

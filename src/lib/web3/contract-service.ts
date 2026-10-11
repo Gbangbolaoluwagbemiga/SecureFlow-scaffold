@@ -52,6 +52,20 @@ export const ESCROW_STATUS_NUMBER: Record<string, number> = {
   cancelled: 7,
 };
 
+/** An escrow's yield, all amounts in stroops. */
+export interface YieldInfo {
+  optedIn: boolean;
+  /** A lending pool is configured for this escrow's token. */
+  available: boolean;
+  /** Escrow money currently earning. */
+  principal: bigint;
+  /** What that money is worth now, interest included. */
+  value: bigint;
+  /** Yield already brought back and held for the escrow. */
+  earned: bigint;
+  freelancerShareBp: number;
+}
+
 export interface CreateEscrowParams {
   depositor: string;
   beneficiary?: string;
@@ -4445,6 +4459,57 @@ export class ContractService {
         nativeToScVal(depositor, { type: "address" }),
       ],
       depositor,
+    );
+  }
+
+  // ─── Yield on idle funds ───────────────────────────────────────────────
+
+  /** Yield state of one escrow, or null if the contract can't say. */
+  async getYieldInfo(escrowId: number): Promise<YieldInfo | null> {
+    try {
+      const rv = await this.simulateReadonly("get_yield_info", [
+        nativeToScVal(escrowId, { type: "u32" }),
+      ]);
+      const raw = scValToNative(rv) as Record<string, unknown>;
+      return {
+        optedIn: Boolean(raw.opted_in),
+        available: Boolean(raw.available),
+        principal: BigInt(String(raw.principal ?? 0)),
+        value: BigInt(String(raw.value ?? 0)),
+        earned: BigInt(String(raw.earned ?? 0)),
+        freelancerShareBp: Number(raw.freelancer_share_bp ?? 0),
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  /** The client lets the escrow's unpaid funds earn, or brings them back. */
+  async setYieldOptIn(
+    escrowId: number,
+    on: boolean,
+    depositor: string,
+  ): Promise<string> {
+    if (!depositor) throw new Error("Wallet not connected");
+    return this.sendOwnerTransaction(
+      "set_yield_opt_in",
+      [
+        nativeToScVal(escrowId, { type: "u32" }),
+        nativeToScVal(on, { type: "bool" }),
+        nativeToScVal(depositor, { type: "address" }),
+      ],
+      depositor,
+    );
+  }
+
+  /** Pay out a finished escrow's yield. Anyone may send it; the money only
+   *  goes to the escrow's own client and freelancer. */
+  async claimYield(escrowId: number, sender: string): Promise<string> {
+    if (!sender) throw new Error("Wallet not connected");
+    return this.sendOwnerTransaction(
+      "claim_yield",
+      [nativeToScVal(escrowId, { type: "u32" })],
+      sender,
     );
   }
 

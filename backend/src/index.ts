@@ -15,6 +15,7 @@ import { getSupabase } from "./lib/supabase.js";
 import { autopilotRouter } from "./routes/autopilot.js";
 import { archiveRouter } from "./routes/archive.js";
 import { startAutopilot } from "./lib/autopilot/runner.js";
+import { startYieldKeeper } from "./lib/autopilot/yield-keeper.js";
 import {
   diditWebhookRouter,
   verificationRouter,
@@ -133,6 +134,7 @@ app.use("/webhooks/didit", diditWebhookRouter);
 app.listen(port, () => {
   console.log(`secureflow-api listening on :${port}`);
   startAutopilot();
+  startYieldKeeper();
   if (!apiSecret) {
     console.warn(
       "[secureflow-api] API_SECRET is unset; /v1 routes are open (set API_SECRET for production)",

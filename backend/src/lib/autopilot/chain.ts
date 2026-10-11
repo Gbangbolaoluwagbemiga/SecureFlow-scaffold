@@ -220,3 +220,37 @@ export const getEvidence = (id: number, index: number) =>
 export async function latestLedger(): Promise<number> {
   return (await rpc().getLatestLedger()).sequence;
 }
+
+// ─── Yield keeper ────────────────────────────────────────────────────────────
+
+export interface ChainYieldInfo {
+  opted_in: boolean;
+  available: boolean;
+  principal: bigint;
+  value: bigint;
+  earned: bigint;
+}
+
+export const getTotalEscrows = () => read<number>("get_total_escrows");
+
+/** Batch read, at most 50 ids per call (the contract's limit). */
+export async function getEscrows(
+  ids: number[],
+): Promise<[number, ChainEscrow][]> {
+  const out: [number, ChainEscrow][] = [];
+  for (let i = 0; i < ids.length; i += 50) {
+    const chunk = ids.slice(i, i + 50);
+    const rows = await read<[number, ChainEscrow][]>(
+      "get_escrows",
+      nativeToScVal(chunk, { type: "u32" }),
+    ).catch(() => [] as [number, ChainEscrow][]);
+    out.push(...rows);
+  }
+  return out;
+}
+
+export const getYieldInfo = (id: number) =>
+  read<ChainYieldInfo>("get_yield_info", u32(id));
+
+/** Supply an opted-in escrow's idle funds. Anyone may call it. */
+export const investIdle = (id: number) => invoke("invest_idle", u32(id));

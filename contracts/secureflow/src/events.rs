@@ -439,3 +439,39 @@ pub struct VerificationRevoked {
     pub wallet: Address,
     pub revoked_by: Address,
 }
+
+// ─── Yield on idle funds ─────────────────────────────────────────────────────
+
+#[contractevent]
+#[derive(Clone, Debug)]
+pub struct YieldOptInChanged {
+    #[topic]
+    pub escrow_id: u32,
+    pub opted_in: bool,
+}
+
+#[contractevent]
+#[derive(Clone, Debug)]
+pub struct YieldDeployed {
+    #[topic]
+    pub escrow_id: u32,
+    pub amount: i128,
+}
+
+#[contractevent]
+#[derive(Clone, Debug)]
+pub struct YieldReleased {
+    #[topic]
+    pub escrow_id: u32,
+    pub principal: i128,
+    pub received: i128,
+}
+
+#[contractevent]
+#[derive(Clone, Debug)]
+pub struct YieldClaimed {
+    #[topic]
+    pub escrow_id: u32,
+    pub to_client: i128,
+    pub to_freelancer: i128,
+}

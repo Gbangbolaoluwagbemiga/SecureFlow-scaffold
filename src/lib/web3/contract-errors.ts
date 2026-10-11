@@ -133,6 +133,23 @@ export const CONTRACT_ERROR_MESSAGES: Record<number, string> = {
 
   // Tokens
   2700: "The token transfer failed. Check your balance and trustline.",
+
+  // Identity verification
+  2800: "Identity verification isn't set up yet.",
+  2801: "Only the verification service can do that.",
+  2802: "This person is already verified on another wallet.",
+  2803: "This wallet is already verified as a different person.",
+  2804: "This wallet isn't verified.",
+
+  // Yield on idle funds
+  2900: "Earning isn't available for this token yet.",
+  2901: "This job isn't set to earn on idle funds.",
+  2902: "Only a pending or active job can start earning.",
+  2903: "This job is too small to earn safely (its fee can't cover the pool's rounding).",
+  2904: "There's no yield to claim on this job.",
+  2905: "Yield is paid out once the job is finished.",
+  2906: "The lending pool didn't respond. Your funds are safe where they are; please try again shortly.",
+  2907: "That share is above 100%.",
 };
 
 /**

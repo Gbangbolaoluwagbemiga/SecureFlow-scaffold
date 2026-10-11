@@ -13,10 +13,12 @@
 //! input. See `storage_types::SecureFlowError` for what each code means.
 
 mod admin;
+mod blend;
 mod escrow_core;
 mod escrow_management;
 mod events;
 mod evidence;
+mod idle_yield;
 mod marketplace;
 mod ratings;
 mod refund_system;
@@ -98,6 +100,57 @@ impl SecureFlow {
 
     pub fn get_verification(env: Env, wallet: Address) -> Option<FreelancerVerification> {
         verification::get_verification(&env, wallet)
+    }
+
+    // ─── Yield on idle funds ─────────────────────────────────────────────────
+
+    /// Owner points a token at a Blend lending pool (`None` stops new
+    /// deposits; escrows already supplied keep their pool and can always
+    /// come back).
+    pub fn set_yield_pool(
+        env: Env,
+        token: Option<Address>,
+        pool: Option<Address>,
+    ) -> Result<(), Error> {
+        Ok(idle_yield::set_pool(&env, token, pool)?)
+    }
+
+    pub fn get_yield_pool(env: Env, token: Option<Address>) -> Option<Address> {
+        idle_yield::get_pool(&env, token)
+    }
+
+    /// Owner sets the freelancer's share of a completed job's yield, in basis
+    /// points (default 2000 = 20%).
+    pub fn set_yield_freelancer_share(env: Env, bp: u32) -> Result<(), Error> {
+        Ok(idle_yield::set_freelancer_share(&env, bp)?)
+    }
+
+    /// The client lets this escrow's unpaid funds earn in the token's pool,
+    /// or brings them back and stops.
+    pub fn set_yield_opt_in(
+        env: Env,
+        escrow_id: u32,
+        on: bool,
+        depositor: Address,
+    ) -> Result<(), Error> {
+        Ok(idle_yield::set_opt_in(&env, escrow_id, on, depositor)?)
+    }
+
+    /// Supply an opted-in escrow's idle money. Anyone may call it (a keeper
+    /// does after payouts); it only ever moves that escrow's own funds into
+    /// its configured pool. Returns the amount supplied.
+    pub fn invest_idle(env: Env, escrow_id: u32) -> Result<i128, Error> {
+        Ok(idle_yield::invest_idle(&env, escrow_id)?)
+    }
+
+    /// Pay out a finished escrow's yield: the freelancer's share on a
+    /// completed job, the rest to the client. Returns (client, freelancer).
+    pub fn claim_yield(env: Env, escrow_id: u32) -> Result<(i128, i128), Error> {
+        Ok(idle_yield::claim(&env, escrow_id)?)
+    }
+
+    pub fn get_yield_info(env: Env, escrow_id: u32) -> Result<YieldInfo, Error> {
+        Ok(idle_yield::info(&env, escrow_id)?)
     }
 
     /// Owner replaces the contract code in place, keeping every escrow.
