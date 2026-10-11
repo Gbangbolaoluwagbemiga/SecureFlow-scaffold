@@ -4,7 +4,10 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useWeb3 } from "@/contexts/web3-context";
 import { contractService, type YieldInfo } from "@/lib/web3/contract-service";
-import { translateContractError } from "@/lib/web3/contract-errors";
+import {
+  errorMessage,
+  translateContractError,
+} from "@/lib/web3/contract-errors";
 
 const ACTIVE = new Set(["pending", "active", "disputed"]);
 const FINISHED = new Set(["completed", "refunded", "cancelled", "expired"]);
@@ -99,7 +102,7 @@ export function YieldPanel({
       await refresh();
       window.dispatchEvent(new CustomEvent("escrowUpdated"));
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
+      const msg = errorMessage(e);
       toast({
         title: `${label} didn't go through`,
         description: /reject|denied|cancel/i.test(msg)

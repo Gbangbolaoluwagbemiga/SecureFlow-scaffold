@@ -20,7 +20,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { contractService } from "@/lib/web3/contract-service";
-import { translateContractError } from "@/lib/web3/contract-errors";
+import {
+  errorMessage,
+  translateContractError,
+} from "@/lib/web3/contract-errors";
 import {
   approveHandover,
   nudgeAutopilot,
@@ -164,7 +167,7 @@ export function HandoverDialog({
       onOpenChange(false);
       onHandedOver();
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
+      const msg = errorMessage(e);
       toast({
         title: "Hand-over didn't finish",
         description: /reject|denied|cancel/i.test(msg)

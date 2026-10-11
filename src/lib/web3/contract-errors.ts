@@ -156,6 +156,30 @@ export const CONTRACT_ERROR_MESSAGES: Record<number, string> = {
  * Turn a raw Soroban error ("... Error(Contract, #1208) ...") into a message
  * a person can act on. Falls back to the raw text when no code is present.
  */
+/**
+ * Pulls a usable message out of anything a wallet or RPC call can throw.
+ * Wallet rejections often arrive as plain objects (not `Error` instances),
+ * so `String(e)` collapses them to the useless "[object Object]".
+ */
+export function errorMessage(e: unknown): string {
+  if (e instanceof Error) return e.message;
+  if (typeof e === "string") return e;
+  if (e && typeof e === "object") {
+    const anyE = e as Record<string, unknown>;
+    for (const key of ["message", "error", "reason", "detail"]) {
+      const v = anyE[key];
+      if (typeof v === "string" && v.trim()) return v;
+    }
+    try {
+      const s = JSON.stringify(e);
+      if (s && s !== "{}") return s;
+    } catch {
+      // fall through
+    }
+  }
+  return "Something went wrong. Please try again.";
+}
+
 export function translateContractError(raw: string): string {
   // A brand-new Stellar wallet doesn't exist on the network until it holds
   // some XLM. RPC reports that as "Account not found: G...".
@@ -175,6 +199,11 @@ export function translateContractError(raw: string): string {
   }
   if (raw.startsWith("Simulation failed:")) {
     return raw.replace("Simulation failed:", "").trim();
+  }
+  // A stray JSON blob (an unrecognized wallet error shape) isn't readable;
+  // show a generic message instead of leaking it to the UI.
+  if (raw.trim().startsWith("{")) {
+    return "Something went wrong. Please try again.";
   }
   return raw || "Something went wrong. Please try again.";
 }

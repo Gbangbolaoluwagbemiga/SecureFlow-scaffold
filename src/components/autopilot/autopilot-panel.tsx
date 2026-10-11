@@ -16,7 +16,10 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useWeb3 } from "@/contexts/web3-context";
 import { contractService } from "@/lib/web3/contract-service";
-import { translateContractError } from "@/lib/web3/contract-errors";
+import {
+  errorMessage,
+  translateContractError,
+} from "@/lib/web3/contract-errors";
 import {
   getAutopilotInfo,
   getAutopilotJob,
@@ -187,9 +190,7 @@ export function AutopilotPanel({
     } catch (e) {
       toast({
         title: "Couldn't take the job back",
-        description: translateContractError(
-          e instanceof Error ? e.message : String(e),
-        ),
+        description: translateContractError(errorMessage(e)),
         variant: "destructive",
       });
     } finally {
