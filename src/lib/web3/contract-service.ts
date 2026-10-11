@@ -1874,6 +1874,15 @@ export class ContractService {
     return native.map((a) => String(a));
   }
 
+  /** The network's latest ledger number, or 0 if the RPC can't say. */
+  async latestLedger(): Promise<number> {
+    try {
+      return (await this.rpcServer.getLatestLedger()).sequence;
+    } catch {
+      return 0;
+    }
+  }
+
   async getOverdueRequest(escrowId: number): Promise<{
     requester: string;
     reason: string;

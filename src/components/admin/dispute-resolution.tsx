@@ -49,6 +49,8 @@ interface Dispute {
 const STROOPS_PER_TOKEN = 10_000_000;
 /** Disputed, as numbered by contractService.getEscrow (not the contract enum). */
 const ESCROW_STATUS_DISPUTED = 3;
+/** Stellar closes a ledger roughly every five seconds. */
+const SECONDS_PER_LEDGER = 5;
 
 /** Milestone status arrives as a number, a string, or `["Disputed"]`. */
 function milestoneStatusName(status: unknown): string {
@@ -99,38 +101,51 @@ export function DisputeResolution({
 
       const disputes: Dispute[] = [];
       const totalEscrows = await contractService.getTotalEscrows();
+      const ids = Array.from({ length: totalEscrows }, (_, i) => i + 1);
 
-      // Escrow ids start at 1. A disputed escrow always has its status set to
-      // Disputed, so only those need their milestones read.
-      for (let escrowId = 1; escrowId <= totalEscrows; escrowId++) {
-        try {
-          const escrow = await contractService.getEscrow(escrowId);
-          if (!escrow || escrow.status !== ESCROW_STATUS_DISPUTED) continue;
+      // Read every escrow in batches, then only the disputed ones' milestones,
+      // all at once. Dispute times are ledger numbers; the latest ledger turns
+      // them into real ages.
+      const [escrows, latest] = await Promise.all([
+        contractService.getEscrowsBatch(ids),
+        contractService.latestLedger(),
+      ]);
+      const disputed = escrows.filter(
+        (e) => e.status === ESCROW_STATUS_DISPUTED,
+      );
+      const milestoneLists = await Promise.all(
+        disputed.map((e) =>
+          contractService.getMilestones(e.escrow_id).catch(() => []),
+        ),
+      );
 
-          const milestones = await contractService.getMilestones(escrowId);
-          milestones.forEach((milestone, milestoneIndex) => {
-            if (milestoneStatusName(milestone.status) !== "disputed") return;
-            const amountStroops = BigInt(milestone.amount ?? 0);
-            disputes.push({
-              escrowId: escrowId.toString(),
-              milestoneIndex,
-              disputedBy: String(milestone.disputed_by ?? ""),
-              disputeReason: String(milestone.dispute_reason ?? ""),
-              disputedAt: Number(milestone.disputed_at ?? 0),
-              milestoneAmount: Number(amountStroops) / STROOPS_PER_TOKEN,
-              milestoneAmountStroops: amountStroops.toString(),
-              clientAddress: escrow.creator,
-              freelancerAddress: escrow.freelancer ?? "Unknown",
-              projectTitle: escrow.project_title || "Untitled Project",
-              milestoneDescription: String(
-                milestone.requirements || milestone.description || "",
-              ),
-            });
+      disputed.forEach((escrow, i) => {
+        const escrowId = escrow.escrow_id;
+        milestoneLists[i].forEach((milestone, milestoneIndex) => {
+          if (milestoneStatusName(milestone.status) !== "disputed") return;
+          const amountStroops = BigInt(milestone.amount ?? 0);
+          const ledger = Number(milestone.disputed_at ?? 0);
+          disputes.push({
+            escrowId: escrowId.toString(),
+            milestoneIndex,
+            disputedBy: String(milestone.disputed_by ?? ""),
+            disputeReason: String(milestone.dispute_reason ?? ""),
+            disputedAt:
+              latest && ledger
+                ? Math.floor(Date.now() / 1000) -
+                  Math.max(0, latest - ledger) * SECONDS_PER_LEDGER
+                : 0,
+            milestoneAmount: Number(amountStroops) / STROOPS_PER_TOKEN,
+            milestoneAmountStroops: amountStroops.toString(),
+            clientAddress: escrow.creator,
+            freelancerAddress: escrow.freelancer ?? "Unknown",
+            projectTitle: escrow.project_title || "Untitled Project",
+            milestoneDescription: String(
+              milestone.requirements || milestone.description || "",
+            ),
           });
-        } catch {
-          // One unreadable escrow must not hide every other dispute.
-        }
-      }
+        });
+      });
 
       setDisputes(disputes);
 
@@ -237,6 +252,7 @@ export function DisputeResolution({
   };
 
   const getDisputeAge = (disputedAt: number) => {
+    if (!disputedAt) return "Recently";
     const now = Math.floor(Date.now() / 1000);
     const ageInSeconds = now - disputedAt;
     const ageInHours = Math.floor(ageInSeconds / 3600);
@@ -302,18 +318,18 @@ export function DisputeResolution({
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.1 }}
               >
-                <Card className="border-red-200 bg-red-100/80 p-4 shadow-lg">
+                <Card className="border-red-500/40 bg-red-500/10 p-4 shadow-lg">
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-2">
                         <AlertTriangle className="h-4 w-4 text-red-500" />
-                        <span className="font-semibold text-red-700">
+                        <span className="font-semibold text-red-600 dark:text-red-400">
                           Dispute #{dispute.escrowId}
                         </span>
                         <Badge variant="destructive">Disputed</Badge>
                       </div>
 
-                      <p className="text-sm text-muted-foreground mb-2">
+                      <p className="text-sm font-medium text-foreground/80 mb-2">
                         {dispute.projectTitle}
                       </p>
 
@@ -326,7 +342,7 @@ export function DisputeResolution({
                         <strong>Dispute Reason:</strong> {dispute.disputeReason}
                       </p>
 
-                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm font-medium text-foreground/80">
                         <div className="flex items-center gap-1">
                           <User className="h-3 w-3" />
                           <span>

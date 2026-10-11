@@ -56,33 +56,39 @@ export function OverdueDisputeResolution({ onResolved }: Props) {
       const { ContractService } = await import("@/lib/web3/contract-service");
       const svc = new ContractService(CONTRACTS.SECUREFLOW_ESCROW);
       const nextId = await svc.getNextEscrowId();
+      const ids = Array.from(
+        { length: Math.max(0, nextId - 1) },
+        (_, i) => i + 1,
+      );
+
+      // An overdue request always leaves its escrow Disputed, so read every
+      // escrow in batches and only ask the disputed ones, all at once.
+      const escrows = (await svc.getEscrowsBatch(ids)).filter(
+        (e) => e.status === 3,
+      );
+      const requests = await Promise.all(
+        escrows.map((e) => svc.getOverdueRequest(e.escrow_id)),
+      );
       const found: OverdueCase[] = [];
-
-      for (let i = 1; i < nextId; i++) {
-        try {
-          const req = await svc.getOverdueRequest(i);
-          if (!req) continue;
-          const escrow = await svc.getEscrow(i);
-          if (!escrow) continue;
-
-          const totalNum = Number(escrow.amount ?? 0);
-          const paidNum = Number(escrow.paid_amount ?? 0);
-          found.push({
-            escrowId: i.toString(),
-            projectTitle: escrow.project_title || `Project #${i}`,
-            clientAddress: escrow.creator || "",
-            freelancerAddress: escrow.freelancer || "",
-            requesterAddress: req.requester || "",
-            reason: req.reason || "",
-            requestedAt: req.requested_at || 0,
-            totalAmount: totalNum / 1e7,
-            paidAmount: paidNum / 1e7,
-            unreleased: (totalNum - paidNum) / 1e7,
-          });
-        } catch {
-          // escrow may not exist
-        }
-      }
+      escrows.forEach((escrow, k) => {
+        const req = requests[k];
+        if (!req) return;
+        const i = escrow.escrow_id;
+        const totalNum = Number(escrow.amount ?? 0);
+        const paidNum = Number(escrow.paid_amount ?? 0);
+        found.push({
+          escrowId: i.toString(),
+          projectTitle: escrow.project_title || `Project #${i}`,
+          clientAddress: escrow.creator || "",
+          freelancerAddress: escrow.freelancer || "",
+          requesterAddress: req.requester || "",
+          reason: req.reason || "",
+          requestedAt: req.requested_at || 0,
+          totalAmount: totalNum / 1e7,
+          paidAmount: paidNum / 1e7,
+          unreleased: (totalNum - paidNum) / 1e7,
+        });
+      });
       setCases(found);
     } catch (err) {
     } finally {
