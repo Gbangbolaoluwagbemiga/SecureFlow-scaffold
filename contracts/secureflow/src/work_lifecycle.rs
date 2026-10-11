@@ -210,6 +210,7 @@ pub fn dispute_milestone(
     m.disputed_by = Some(disputer.clone());
     m.dispute_reason = Some(reason.clone());
     escrow.status = EscrowStatus::Disputed;
+    core::p_set(env, &DataKey::EverDisputed(escrow_id), &true);
     core::save_milestone(env, escrow_id, milestone_index, &m);
     core::save_escrow(env, escrow_id, &escrow);
     core::p_remove(env, &DataKey::DisputeVoters(escrow_id));

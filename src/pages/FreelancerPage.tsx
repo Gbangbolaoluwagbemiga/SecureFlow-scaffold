@@ -31,6 +31,7 @@ import {
   AutopilotReviewing,
 } from "@/components/autopilot/autopilot-badge";
 import { IdentityVerificationCard } from "@/components/verification/identity-verification-card";
+import { YieldPanel } from "@/components/yield/yield-panel";
 import { MyApplications } from "@/components/freelancer/my-applications";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -1753,6 +1754,21 @@ export default function FreelancerPage() {
                                     </div>
                                   </div>
                                 )}
+                            </div>
+
+                            {/* Yield on this job's idle budget: the freelancer's tip */}
+                            <div className="mb-4">
+                              <YieldPanel
+                                escrowId={Number(escrow.id)}
+                                status={escrow.status}
+                                isClient={false}
+                                isFreelancer
+                                hadDispute={escrow.milestones.some(
+                                  (m) =>
+                                    m.status === "disputed" ||
+                                    m.status === "resolved",
+                                )}
+                              />
                             </div>
 
                             {/* Milestones - Compact Design */}

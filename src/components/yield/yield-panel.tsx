@@ -17,24 +17,42 @@ function xlm(stroops: bigint): string {
   return n.toLocaleString(undefined, { maximumFractionDigits: 4 });
 }
 
+function Pill({ live }: { live?: boolean }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/50 px-2 py-0.5 text-[10px] font-semibold tracking-wider text-emerald-600 dark:text-emerald-400">
+      <span className="relative flex h-1.5 w-1.5">
+        {live && (
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+        )}
+        <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
+      </span>
+      YIELD
+    </span>
+  );
+}
+
 /**
  * Idle funds earning in Blend, Stellar's lending market.
  *
- * The client opts in per job; unpaid budget is supplied to the pool and comes
- * back to cash before any payment, so payouts never wait on interest. When the
- * job is finished, the yield is claimed: the freelancer's share on a completed
- * job, the rest to the client.
+ * The client opts a job in; its unpaid budget is supplied to the pool and
+ * comes back to cash before every payment. When the job is finished the yield
+ * is distributed: a job completed without dispute tips its freelancer (60%)
+ * and the platform keeps the rest; any other ending sends it all to the
+ * platform. The client's principal is never part of it.
  */
 export function YieldPanel({
   escrowId,
   status,
   isClient,
   isFreelancer,
+  hadDispute = false,
 }: {
   escrowId: number;
   status: string;
   isClient: boolean;
   isFreelancer: boolean;
+  /** The job went through a dispute: no tip, all yield to the platform. */
+  hadDispute?: boolean;
 }) {
   const { wallet } = useWeb3();
   const { toast } = useToast();
@@ -59,13 +77,15 @@ export function YieldPanel({
     return () => clearInterval(t);
   }, [info?.optedIn, refresh]);
 
-  if (!info) return null;
+  if (!info || (!isClient && !isFreelancer)) return null;
   const active = ACTIVE.has(status);
   const finished = FINISHED.has(status);
   const accrued =
     info.value > info.principal ? info.value - info.principal : 0n;
   const soFar = info.earned + accrued;
-  const freelancerPct = info.freelancerShareBp / 100;
+  const tipPct = info.freelancerShareBp / 100;
+  const tipOf = (amount: bigint) =>
+    (amount * BigInt(info.freelancerShareBp)) / 10_000n;
 
   const act = async (
     label: string,
@@ -92,27 +112,28 @@ export function YieldPanel({
     }
   };
 
-  // Finished with yield waiting: either party can pay it out.
-  if (finished && info.earned > 0n && (isClient || isFreelancer)) {
-    const toFreelancer =
-      status === "completed"
-        ? (info.earned * BigInt(info.freelancerShareBp)) / 10_000n
-        : 0n;
-    const toClient = info.earned - toFreelancer;
+  const shell =
+    "flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-500/35 bg-emerald-500/[0.06] px-4 py-3";
+
+  // ── Finished, yield waiting to be distributed ──
+  if (finished && info.earned > 0n) {
+    const tipped = status === "completed" && !hadDispute;
+    const tip = tipped ? tipOf(info.earned) : 0n;
     return (
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-500/40 bg-emerald-500/[0.07] p-4">
-        <div className="flex items-start gap-3">
-          <Gift className="mt-0.5 h-5 w-5 shrink-0 text-emerald-500" />
-          <div className="text-sm">
-            <p className="font-semibold text-emerald-600 dark:text-emerald-400">
-              {xlm(info.earned)} XLM of yield is ready
-            </p>
-            <p className="text-muted-foreground">
-              Client {xlm(toClient)} XLM
-              {toFreelancer > 0n &&
-                ` · Freelancer ${xlm(toFreelancer)} XLM (${freelancerPct}% bonus)`}
-            </p>
-          </div>
+      <div className={shell}>
+        <div className="min-w-0 space-y-1">
+          <Pill />
+          <p className="text-sm font-semibold">
+            <Gift className="mr-1.5 inline h-4 w-4 text-emerald-500" />
+            {xlm(info.earned)} XLM of yield earned
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {tipped
+              ? isFreelancer
+                ? `Your tip for a job well done: ${xlm(tip)} XLM (${tipPct}%). The platform keeps the rest.`
+                : `${xlm(tip)} XLM goes to the freelancer as a ${tipPct}% tip; the platform keeps the rest.`
+              : "No tip on a job that was disputed or not completed; this yield goes to the platform."}
+          </p>
         </div>
         <Button
           size="sm"
@@ -120,47 +141,44 @@ export function YieldPanel({
           className="bg-emerald-600 text-white hover:bg-emerald-500"
           onClick={() =>
             act(
-              "Claim",
+              "Payout",
               () => contractService.claimYield(escrowId, wallet.address!),
               {
-                title: "Yield paid out",
-                description: "It's been sent to the client and freelancer.",
+                title: tipped ? "Tip paid out" : "Yield settled",
+                description: tipped
+                  ? "The freelancer's tip has been sent."
+                  : "The yield went to the platform.",
               },
             )
           }
         >
           {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          Claim yield
+          {tipped && isFreelancer ? "Claim tip" : "Pay out yield"}
         </Button>
       </div>
     );
   }
 
-  // Earning now.
+  // ── Earning now ──
   if (info.optedIn && active) {
     return (
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-500/40 bg-emerald-500/[0.07] p-4">
-        <div className="flex items-start gap-3">
-          <span className="relative mt-1.5 flex h-2 w-2 shrink-0">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-            <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
-          </span>
-          <div className="text-sm">
-            <p className="font-semibold text-emerald-600 dark:text-emerald-400">
-              {info.principal > 0n
-                ? `${xlm(info.principal)} XLM earning in Blend`
-                : "Earning paused for a moment"}
-              <span className="font-normal text-muted-foreground">
-                {" "}
-                · +{xlm(soFar)} XLM so far
-              </span>
-            </p>
-            <p className="text-muted-foreground">
-              {info.principal > 0n
-                ? "Funds come back to cash before any payment, so payouts are never held up by interest. Yield is paid out when the job is finished."
-                : "A payment just went out; the rest of the budget is reinvested shortly."}
-            </p>
-          </div>
+      <div className={shell}>
+        <div className="min-w-0 space-y-1">
+          <Pill live />
+          <p className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">
+            {info.principal > 0n
+              ? `${xlm(info.principal)} XLM earning in Blend`
+              : "Reinvesting after a payment"}
+            <span className="font-normal text-muted-foreground">
+              {" "}
+              · +{xlm(soFar)} XLM so far
+            </span>
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {isFreelancer
+              ? `Complete the job without a dispute and ${tipPct}% of this yield is yours as a tip.`
+              : `Returns to cash before every payment. ${tipPct}% tips your freelancer on completion.`}
+          </p>
         </div>
         {isClient && (
           <Button
@@ -179,7 +197,7 @@ export function YieldPanel({
                 {
                   title: "Funds back in escrow",
                   description:
-                    "The budget is held in cash again. Yield earned so far is kept for the job.",
+                    "The budget is held in cash again. Yield earned so far stays with the job.",
                 },
               )
             }
@@ -192,22 +210,23 @@ export function YieldPanel({
     );
   }
 
-  // The offer, to the client of a live job.
+  // ── The offer, to the client of a live job ──
   if (isClient && active && info.available && !info.optedIn) {
     return (
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-500/30 bg-emerald-500/[0.04] p-4">
-        <div className="flex items-start gap-3">
-          <Sprout className="mt-0.5 h-5 w-5 shrink-0 text-emerald-500" />
-          <div className="text-sm">
-            <p className="font-semibold">Earn on idle funds</p>
-            <p className="text-muted-foreground">
-              While the budget waits for milestones it can earn interest in
-              Blend, Stellar's lending market. It always comes back to cash
-              before any payment. You keep {100 - freelancerPct}% of the
-              interest; the freelancer gets {freelancerPct}% when the job is
-              completed.
-            </p>
-          </div>
+      <div
+        className={shell.replace(
+          "bg-emerald-500/[0.06]",
+          "bg-emerald-500/[0.03]",
+        )}
+      >
+        <div className="min-w-0 space-y-1">
+          <Pill />
+          <p className="text-sm font-semibold">Let idle funds earn</p>
+          <p className="text-xs text-muted-foreground">
+            The budget earns in Blend while it waits, and comes back before
+            every payment. {tipPct}% of the yield tips your freelancer on
+            completion.
+          </p>
         </div>
         <Button
           size="sm"

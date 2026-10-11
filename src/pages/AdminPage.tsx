@@ -44,8 +44,15 @@ import {
   FileText,
   Wallet,
   RefreshCw,
+  Settings,
+  Sprout,
+  Plus,
+  X,
 } from "lucide-react";
 import { ArbiterManagement } from "@/components/admin/arbiter-management";
+import { DisputeResolution } from "@/components/admin/dispute-resolution";
+import { OverdueDisputeResolution } from "@/components/admin/overdue-dispute-resolution";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const USDC_ADDRESS = (
   (import.meta.env.VITE_USDC_TOKEN_CONTRACT as string | undefined) ?? ""
@@ -107,6 +114,12 @@ export default function AdminPage() {
     null,
   );
 
+  // Yield on idle funds
+  const [yieldPool, setYieldPool] = useState<string | null>(null);
+  const [yieldShareBp, setYieldShareBp] = useState<number | null>(null);
+  const [newShare, setNewShare] = useState("");
+  const [savingShare, setSavingShare] = useState(false);
+
   // Pause/unpause dialog
   const [pauseDialogOpen, setPauseDialogOpen] = useState(false);
   const [pauseAction, setPauseAction] = useState<"pause" | "unpause">("pause");
@@ -118,6 +131,7 @@ export default function AdminPage() {
         checkPausedStatus(),
         fetchContractOwner(),
         fetchContractStats(),
+        fetchYieldSettings(),
         fetchFeeBalances(),
       ]);
     }
@@ -155,6 +169,52 @@ export default function AdminPage() {
       setWhitelistedTokenList([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchYieldSettings = async () => {
+    const [pool, total] = await Promise.all([
+      contractService.getYieldPool(),
+      contractService.getTotalEscrows().catch(() => 0),
+    ]);
+    setYieldPool(pool);
+    // The share is reported on every escrow's yield info.
+    if (total > 0) {
+      const info = await contractService.getYieldInfo(total);
+      if (info) setYieldShareBp(info.freelancerShareBp);
+    }
+  };
+
+  const handleSetYieldShare = async () => {
+    const pct = Number(newShare);
+    if (!wallet.address || !Number.isFinite(pct) || pct < 0 || pct > 100) {
+      toast({
+        title: "Invalid share",
+        description: "Enter a percentage between 0 and 100.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setSavingShare(true);
+    try {
+      await contractService.setYieldFreelancerShare(
+        Math.round(pct * 100),
+        wallet.address,
+      );
+      toast({
+        title: "Tip share updated",
+        description: `Freelancers now get ${pct}% of a successful job's yield.`,
+      });
+      setNewShare("");
+      await fetchYieldSettings();
+    } catch (e: any) {
+      toast({
+        title: "Couldn't update the share",
+        description: e?.message || "Transaction failed.",
+        variant: "destructive",
+      });
+    } finally {
+      setSavingShare(false);
     }
   };
 
@@ -527,292 +587,98 @@ export default function AdminPage() {
   }
 
   // ── Main admin UI ─────────────────────────────────────────────────────────────
+  const usdcListed =
+    !!USDC_ADDRESS && whitelistedTokenList.some((t) => t === USDC_ADDRESS);
+  const tabs = isOwner
+    ? ["settings", "tokens", "arbiters", "disputes", "danger"]
+    : ["disputes"];
+
   return (
-    <div className="min-h-screen py-12 gradient-mesh">
-      <div className="container mx-auto px-4 max-w-6xl space-y-6">
+    <div className="min-h-screen py-10 gradient-mesh">
+      <div className="container mx-auto px-4 max-w-5xl space-y-6">
         {/* Header */}
-        <div>
-          <h1 className="text-4xl font-bold mb-2">Admin Panel</h1>
-          <p className="text-muted-foreground">
-            Manage SecureFlow contract settings and configurations
-          </p>
-        </div>
-
-        {/* Role + Status alerts */}
-        <div className="space-y-3">
-          <Alert>
-            <CheckCircle2 className="h-4 w-4" />
-            <AlertTitle>
-              {isOwner ? "Owner Access Confirmed" : "Arbiter Access Confirmed"}
-            </AlertTitle>
-            <AlertDescription className="flex items-center gap-2">
-              You are connected as{" "}
-              <Badge
-                variant={isOwner ? "default" : "secondary"}
-                className="gap-1"
-              >
-                {isOwner ? (
-                  <Shield className="h-3 w-3" />
-                ) : (
-                  <Scale className="h-3 w-3" />
-                )}
-                {isOwner ? "Contract Owner" : "Authorized Arbiter"}
-              </Badge>
-            </AlertDescription>
-          </Alert>
-
-          {isPaused && (
-            <Alert variant="destructive">
-              <AlertTriangle className="h-4 w-4" />
-              <AlertTitle>Contract Paused</AlertTitle>
-              <AlertDescription>
-                All escrow operations are currently paused. Users cannot create
-                or interact with escrows.
-              </AlertDescription>
-            </Alert>
-          )}
-        </div>
-
-        {/* Platform Stats Overview */}
-        {isOwner && !loading && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <Card>
-              <CardContent className="pt-6">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
-                    <FileText className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold">
-                      {contractStats.totalEscrows}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Total Escrows
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="pt-6">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-green-100 dark:bg-green-900/30">
-                    <Percent className="h-5 w-5 text-green-600 dark:text-green-400" />
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold">
-                      {(contractStats.platformFeeBP / 100).toFixed(2)}%
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Platform Fee
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="pt-6">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-900/30">
-                    <Users className="h-5 w-5 text-purple-600 dark:text-purple-400" />
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold">
-                      {contractStats.authorizedArbiters}
-                    </p>
-                    <p className="text-xs text-muted-foreground">Arbiters</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="pt-6">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-orange-100 dark:bg-orange-900/30">
-                    <BarChart3 className="h-5 w-5 text-orange-600 dark:text-orange-400" />
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold">
-                      {contractStats.whitelistedTokens}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Tokens Listed
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Admin</h1>
+            <p className="text-sm text-muted-foreground">
+              Contract settings, tokens, arbiters and disputes
+            </p>
           </div>
-        )}
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="secondary" className="gap-1.5 py-1">
+              {isOwner ? (
+                <Shield className="h-3.5 w-3.5" />
+              ) : (
+                <Scale className="h-3.5 w-3.5" />
+              )}
+              {isOwner ? "Contract owner" : "Arbiter"}
+            </Badge>
+            <Badge
+              variant={isPaused ? "destructive" : "secondary"}
+              className="gap-1.5 py-1"
+            >
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${isPaused ? "bg-white" : "bg-emerald-500"}`}
+              />
+              {isPaused ? "Job creation paused" : "Live"}
+            </Badge>
+          </div>
+        </div>
 
-        {/* ── Owner-only sections ─────────────────────────────────────────────── */}
         {contractOwner === null && (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
             Loading owner controls…
           </div>
         )}
-        {isOwner && (
-          <>
-            {/* Quick Actions */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Lock className="h-5 w-5" />
-                  Quick Actions
-                </CardTitle>
-                <CardDescription>Common administrative tasks</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <Button
-                  onClick={handleQuickWhitelistUSDC}
-                  disabled={isWhitelisting || !USDC_ADDRESS}
-                  className="w-full bg-linear-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800"
-                  size="lg"
-                >
-                  {isWhitelisting ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Whitelisting USDC...
-                    </>
-                  ) : (
-                    <>
-                      <Lock className="mr-2 h-4 w-4" />
-                      Whitelist USDC Token
-                    </>
-                  )}
-                </Button>
-                {USDC_ADDRESS && (
-                  <p className="text-xs text-muted-foreground text-center">
-                    Enable USDC ({short(USDC_ADDRESS, 10, 8)}) for escrow
-                    payments
-                  </p>
-                )}
-              </CardContent>
-            </Card>
 
-            {/* Token Management + Whitelisted Tokens */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Coins className="h-5 w-5" />
-                    Add Custom Token
-                  </CardTitle>
-                  <CardDescription>
-                    Whitelist a Soroban token contract (C...)
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="tokenAddress">Token Contract Address</Label>
-                    <Input
-                      id="tokenAddress"
-                      placeholder="C..."
-                      value={tokenToWhitelist}
-                      onChange={(e) => setTokenToWhitelist(e.target.value)}
-                      className="font-mono text-sm"
-                    />
-                  </div>
-                  <Button
-                    onClick={handleWhitelistToken}
-                    disabled={isWhitelisting || !tokenToWhitelist.trim()}
-                    className="w-full"
-                  >
-                    {isWhitelisting ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Whitelisting...
-                      </>
-                    ) : (
-                      "Whitelist Token"
-                    )}
-                  </Button>
-                </CardContent>
-              </Card>
+        <Tabs defaultValue={tabs[0]} key={tabs.join(",")}>
+          <TabsList className="h-auto w-full flex-wrap justify-start gap-1 bg-muted/50 p-1">
+            {isOwner && (
+              <>
+                <TabsTrigger value="settings" className="gap-1.5">
+                  <Settings className="h-4 w-4" /> Settings
+                </TabsTrigger>
+                <TabsTrigger value="tokens" className="gap-1.5">
+                  <Coins className="h-4 w-4" /> Tokens & fees
+                </TabsTrigger>
+                <TabsTrigger value="arbiters" className="gap-1.5">
+                  <Users className="h-4 w-4" /> Arbiters
+                </TabsTrigger>
+              </>
+            )}
+            <TabsTrigger value="disputes" className="gap-1.5">
+              <Scale className="h-4 w-4" /> Disputes
+            </TabsTrigger>
+            {isOwner && (
+              <TabsTrigger value="danger" className="gap-1.5">
+                <AlertTriangle className="h-4 w-4" /> Danger zone
+              </TabsTrigger>
+            )}
+          </TabsList>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <CheckCircle2 className="h-5 w-5 text-green-600" />
-                    Whitelisted Tokens
-                  </CardTitle>
-                  <CardDescription>Active tokens in the system</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {loading ? (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Loader2 className="h-4 w-4 animate-spin" /> Loading...
-                    </div>
-                  ) : whitelistedTokenList.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">
-                      No tokens whitelisted yet. Native XLM is always available.
-                    </p>
-                  ) : (
-                    <div className="space-y-2">
-                      <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3">
-                        <p className="text-sm font-semibold text-green-900 dark:text-green-100">
-                          {whitelistedTokenList.length} Token
-                          {whitelistedTokenList.length !== 1 ? "s" : ""}{" "}
-                          Whitelisted
-                        </p>
-                      </div>
-                      <div className="space-y-1">
-                        {whitelistedTokenList.slice(0, 5).map((t) => (
-                          <div key={t} className="flex items-center gap-1">
-                            <button
-                              type="button"
-                              onClick={() => void copy(t, "Token address")}
-                              className="flex-1 text-left text-xs font-mono bg-muted p-2 rounded hover:bg-muted/80 transition-colors truncate"
-                              title="Click to copy"
-                            >
-                              {short(t, 20, 14)}
-                            </button>
-                            <button
-                              type="button"
-                              title="Delist token"
-                              disabled={delistingToken === t}
-                              onClick={() => void handleDelistToken(t)}
-                              className="shrink-0 p-1.5 rounded text-destructive hover:bg-destructive/10 disabled:opacity-50 transition-colors"
-                            >
-                              {delistingToken === t ? (
-                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                              ) : (
-                                <Trash2 className="h-3.5 w-3.5" />
-                              )}
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Platform Fee + Contract Controls */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Platform Fee */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Percent className="h-5 w-5" />
-                    Platform Fee
-                  </CardTitle>
-                  <CardDescription>
-                    Current fee:{" "}
-                    {currentFeeBP === null ? (
-                      <Loader2 className="inline h-3 w-3 animate-spin" />
-                    ) : (
-                      <strong>
-                        {(currentFeeBP / 100).toFixed(2)}% ({currentFeeBP} bp)
-                      </strong>
-                    )}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="newFee">New Fee (%)</Label>
+          {/* ── Settings ─────────────────────────────────────────────── */}
+          {isOwner && (
+            <TabsContent value="settings" className="mt-6 space-y-6">
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <Percent className="h-4 w-4" /> Platform fee
+                    </CardTitle>
+                    <CardDescription>
+                      Now{" "}
+                      {currentFeeBP === null ? (
+                        <Loader2 className="inline h-3 w-3 animate-spin" />
+                      ) : (
+                        <strong>
+                          {(currentFeeBP / 100).toFixed(2)}% ({currentFeeBP} bp)
+                        </strong>
+                      )}
+                      , charged on top of new escrows
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
                     <div className="flex gap-2">
                       <Input
                         id="newFee"
@@ -820,7 +686,7 @@ export default function AdminPage() {
                         min="0"
                         max="10"
                         step="0.01"
-                        placeholder="e.g. 2.5"
+                        placeholder="New fee %, 0–10"
                         value={newFeePercent}
                         onChange={(e) => setNewFeePercent(e.target.value)}
                       />
@@ -832,194 +698,349 @@ export default function AdminPage() {
                         {isSettingFee ? (
                           <Loader2 className="h-4 w-4 animate-spin" />
                         ) : (
-                          "Set Fee"
+                          "Set"
                         )}
                       </Button>
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      Enter 0–10%. Stored as basis points (1% = 100 bp). Applies
-                      to future deposits.
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
 
-              {/* Pause / Unpause */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    {isPaused ? (
-                      <Play className="h-5 w-5" />
-                    ) : (
-                      <Pause className="h-5 w-5" />
-                    )}
-                    Contract Controls
-                  </CardTitle>
-                  <CardDescription>
-                    Status:{" "}
-                    <Badge
-                      variant={isPaused ? "destructive" : "default"}
-                      className="gap-1"
-                    >
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="flex items-center gap-2 text-base">
                       {isPaused ? (
-                        <Pause className="h-3 w-3" />
-                      ) : (
-                        <Play className="h-3 w-3" />
-                      )}
-                      {isPaused ? "Paused" : "Active"}
-                    </Badge>
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <p className="text-sm text-muted-foreground">
-                    {isPaused
-                      ? "The contract is paused. Resume operations to allow users to create and interact with escrows."
-                      : "Temporarily halt all escrow operations for maintenance or emergency situations."}
-                  </p>
-                  <Button
-                    onClick={() => {
-                      setPauseAction(isPaused ? "unpause" : "pause");
-                      setPauseDialogOpen(true);
-                    }}
-                    variant={isPaused ? "default" : "destructive"}
-                    className="w-full gap-2"
-                    disabled={
-                      pauseActionLoading ||
-                      pauseJobCreation.isPending ||
-                      unpauseJobCreation.isPending
-                    }
-                  >
-                    {pauseActionLoading ||
-                    pauseJobCreation.isPending ||
-                    unpauseJobCreation.isPending ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Processing...
-                      </>
-                    ) : isPaused ? (
-                      <>
                         <Play className="h-4 w-4" />
-                        Unpause Contract
-                      </>
-                    ) : (
-                      <>
+                      ) : (
                         <Pause className="h-4 w-4" />
-                        Pause Contract
-                      </>
-                    )}
-                  </Button>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Platform Fees */}
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="flex items-center gap-2">
-                      <Wallet className="h-5 w-5" />
-                      Platform Fees
+                      )}
+                      Job creation
                     </CardTitle>
                     <CardDescription>
-                      Accumulated fees ready to collect. Sent to the fee
-                      collector address on withdrawal.
+                      {isPaused
+                        ? "Paused: nobody can post new jobs."
+                        : "Live: anyone can post new jobs."}
                     </CardDescription>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={fetchFeeBalances}
-                    disabled={fetchingFees}
-                    className="shrink-0"
-                  >
-                    <RefreshCw
-                      className={`h-4 w-4 ${fetchingFees ? "animate-spin" : ""}`}
-                    />
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {fetchingFees && feeBalances.length === 0 ? (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Loader2 className="h-4 w-4 animate-spin" /> Loading
-                    balances...
-                  </div>
-                ) : feeBalances.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    No fee data available.
-                  </p>
-                ) : (
-                  <div className="space-y-3">
-                    {feeBalances.map(({ token, label, raw, display }) => {
-                      const hasBalance = BigInt(raw) > 0n;
-                      const isWithdrawing = withdrawingFeeToken === token;
-                      return (
-                        <div
-                          key={token}
-                          className="flex items-center justify-between rounded-lg border p-3"
-                        >
-                          <div>
-                            <p className="font-semibold text-sm">{label}</p>
-                            <p
-                              className={`text-2xl font-bold ${hasBalance ? "text-green-600 dark:text-green-400" : "text-muted-foreground"}`}
-                            >
-                              {display}
-                            </p>
-                            <p className="text-xs text-muted-foreground font-mono">
-                              {raw} stroops
-                            </p>
-                          </div>
-                          <Button
-                            onClick={() => handleWithdrawFees(token, label)}
-                            disabled={
-                              !hasBalance ||
-                              isWithdrawing ||
-                              withdrawingFeeToken !== null
-                            }
-                            variant={hasBalance ? "default" : "outline"}
-                            size="sm"
-                          >
-                            {isWithdrawing ? (
-                              <>
-                                <Loader2 className="mr-2 h-3 w-3 animate-spin" />
-                                Withdrawing...
-                              </>
-                            ) : (
-                              <>
-                                <Wallet className="mr-2 h-3 w-3" />
-                                Collect {label}
-                              </>
-                            )}
-                          </Button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+                  </CardHeader>
+                  <CardContent>
+                    <Button
+                      onClick={() => {
+                        setPauseAction(isPaused ? "unpause" : "pause");
+                        setPauseDialogOpen(true);
+                      }}
+                      variant={isPaused ? "default" : "outline"}
+                      className="w-full gap-2"
+                      disabled={
+                        pauseActionLoading ||
+                        pauseJobCreation.isPending ||
+                        unpauseJobCreation.isPending
+                      }
+                    >
+                      {pauseActionLoading ||
+                      pauseJobCreation.isPending ||
+                      unpauseJobCreation.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : isPaused ? (
+                        <Play className="h-4 w-4" />
+                      ) : (
+                        <Pause className="h-4 w-4" />
+                      )}
+                      {isPaused ? "Resume job creation" : "Pause job creation"}
+                    </Button>
+                  </CardContent>
+                </Card>
+              </div>
 
-            {/* Delete Escrow */}
-            <Card className="border-red-200 dark:border-red-900/50">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-red-600 dark:text-red-400">
-                  <Trash2 className="h-5 w-5" />
-                  Delete Escrow
-                </CardTitle>
-                <CardDescription>
-                  Permanently removes an escrow record from on-chain storage.
-                  The escrow must be in a terminal state (released, refunded,
-                  expired, or cancelled) with zero remaining funds.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="deleteId">Escrow ID</Label>
+              {/* Yield */}
+              <Card className="border-emerald-500/30">
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Sprout className="h-4 w-4 text-emerald-500" /> Yield on
+                    idle funds
+                  </CardTitle>
+                  <CardDescription>
+                    Clients can let unpaid budgets earn in Blend. On a job
+                    completed without dispute the freelancer gets a tip; the
+                    platform keeps the rest, and all of it otherwise.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      XLM pool
+                    </p>
+                    {yieldPool ? (
+                      <button
+                        type="button"
+                        onClick={() => void copy(yieldPool, "Pool address")}
+                        className="font-mono text-sm hover:underline"
+                        title="Click to copy"
+                      >
+                        Blend · {short(yieldPool, 6, 6)}
+                      </button>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        Not configured
+                      </p>
+                    )}
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      Freelancer tip{" "}
+                      {yieldShareBp !== null && (
+                        <span className="normal-case tracking-normal">
+                          · now {yieldShareBp / 100}%
+                        </span>
+                      )}
+                    </p>
+                    <div className="flex gap-2">
+                      <Input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="1"
+                        placeholder="Tip %, 0–100"
+                        value={newShare}
+                        onChange={(e) => setNewShare(e.target.value)}
+                      />
+                      <Button
+                        onClick={handleSetYieldShare}
+                        disabled={savingShare || newShare === ""}
+                        className="shrink-0"
+                      >
+                        {savingShare ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          "Set"
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
+
+          {/* ── Tokens & fees ────────────────────────────────────────── */}
+          {isOwner && (
+            <TabsContent value="tokens" className="mt-6 space-y-6">
+              <Card>
+                <CardHeader className="pb-3">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <CardTitle className="flex items-center gap-2 text-base">
+                        <Coins className="h-4 w-4" /> Accepted tokens
+                      </CardTitle>
+                      <CardDescription>
+                        Native XLM is always accepted.
+                      </CardDescription>
+                    </div>
+                    {USDC_ADDRESS && !usdcListed && !loading && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={handleQuickWhitelistUSDC}
+                        disabled={isWhitelisting}
+                        className="gap-1.5"
+                      >
+                        {isWhitelisting ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Plus className="h-3.5 w-3.5" />
+                        )}
+                        Add USDC
+                      </Button>
+                    )}
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {loading ? (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {whitelistedTokenList.map((t) => (
+                        <span
+                          key={t}
+                          className="inline-flex items-center gap-1 rounded-full border bg-muted/40 py-1 pl-3 pr-1 text-xs"
+                        >
+                          <button
+                            type="button"
+                            onClick={() => void copy(t, "Token address")}
+                            className="font-mono hover:underline"
+                            title={t}
+                          >
+                            {t === USDC_ADDRESS
+                              ? "USDC"
+                              : t === getNativeXLMSACAddress()
+                                ? "XLM"
+                                : short(t, 5, 5)}
+                          </button>
+                          <button
+                            type="button"
+                            title="Remove from the list"
+                            disabled={delistingToken === t}
+                            onClick={() => void handleDelistToken(t)}
+                            className="rounded-full p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
+                          >
+                            {delistingToken === t ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <X className="h-3 w-3" />
+                            )}
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex gap-2">
+                    <Input
+                      id="tokenAddress"
+                      placeholder="Add a token contract (C…)"
+                      value={tokenToWhitelist}
+                      onChange={(e) => setTokenToWhitelist(e.target.value)}
+                      className="font-mono text-sm"
+                    />
+                    <Button
+                      onClick={handleWhitelistToken}
+                      disabled={isWhitelisting || !tokenToWhitelist.trim()}
+                      className="shrink-0"
+                    >
+                      {isWhitelisting ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        "Add"
+                      )}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <CardTitle className="flex items-center gap-2 text-base">
+                        <Wallet className="h-4 w-4" /> Earned fees
+                      </CardTitle>
+                      <CardDescription>
+                        Platform fees and the platform's share of yield, sent to
+                        the fee collector. A tiny reserve stays behind to cover
+                        yield rounding.
+                      </CardDescription>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={fetchFeeBalances}
+                      disabled={fetchingFees}
+                      className="shrink-0"
+                    >
+                      <RefreshCw
+                        className={`h-4 w-4 ${fetchingFees ? "animate-spin" : ""}`}
+                      />
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {fetchingFees && feeBalances.length === 0 ? (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+                    </div>
+                  ) : feeBalances.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      No fee data available.
+                    </p>
+                  ) : (
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      {feeBalances.map(({ token, label, raw, display }) => {
+                        const hasBalance = BigInt(raw) > 0n;
+                        const isWithdrawingFee = withdrawingFeeToken === token;
+                        return (
+                          <div
+                            key={token}
+                            className="flex items-center justify-between rounded-lg border p-3"
+                          >
+                            <div>
+                              <p className="text-xs text-muted-foreground">
+                                {label}
+                              </p>
+                              <p
+                                className={`text-xl font-bold ${hasBalance ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"}`}
+                              >
+                                {display}
+                              </p>
+                            </div>
+                            <Button
+                              onClick={() => handleWithdrawFees(token, label)}
+                              disabled={
+                                !hasBalance ||
+                                isWithdrawingFee ||
+                                withdrawingFeeToken !== null
+                              }
+                              variant={hasBalance ? "default" : "outline"}
+                              size="sm"
+                            >
+                              {isWithdrawingFee ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                "Collect"
+                              )}
+                            </Button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
+
+          {/* ── Arbiters ─────────────────────────────────────────────── */}
+          {isOwner && (
+            <TabsContent value="arbiters" className="mt-6">
+              <ArbiterManagement
+                onArbiterAdded={() => fetchContractStats()}
+                onArbiterRemoved={() => fetchContractStats()}
+              />
+            </TabsContent>
+          )}
+
+          {/* ── Disputes ─────────────────────────────────────────────── */}
+          <TabsContent value="disputes" className="mt-6">
+            <Tabs defaultValue="milestone">
+              <TabsList className="mb-4">
+                <TabsTrigger value="milestone">Milestone disputes</TabsTrigger>
+                <TabsTrigger value="overdue">Overdue jobs</TabsTrigger>
+              </TabsList>
+              <TabsContent value="milestone">
+                <DisputeResolution onDisputeResolved={() => {}} />
+              </TabsContent>
+              <TabsContent value="overdue">
+                <OverdueDisputeResolution />
+              </TabsContent>
+            </Tabs>
+          </TabsContent>
+
+          {/* ── Danger zone ──────────────────────────────────────────── */}
+          {isOwner && (
+            <TabsContent value="danger" className="mt-6 space-y-6">
+              <Card className="border-red-500/30">
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2 text-base text-red-600 dark:text-red-400">
+                    <Trash2 className="h-4 w-4" /> Delete a finished escrow
+                  </CardTitle>
+                  <CardDescription>
+                    Removes a released, refunded, expired or cancelled escrow
+                    with nothing left in it from on-chain storage. Irreversible.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
                   <div className="flex gap-2">
                     <Input
                       id="deleteId"
-                      placeholder="e.g. 7"
+                      placeholder="Escrow number, e.g. 7"
                       value={deleteInput}
                       onChange={(e) => setDeleteInput(e.target.value)}
                       className="font-mono"
@@ -1037,128 +1058,70 @@ export default function AdminPage() {
                       )}
                     </Button>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Enter the raw on-chain escrow number. This action is
-                    irreversible.
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
 
-            {/* Withdraw Stuck Funds */}
-            <Card className="border-orange-200 dark:border-orange-900/50">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-orange-600 dark:text-orange-400">
-                  <Scale className="h-5 w-5" />
-                  Withdraw Stuck Funds
-                </CardTitle>
-                <CardDescription>
-                  Emergency recovery for tokens accidentally transferred to the
-                  contract. Only withdraws the <strong>excess</strong> above
-                  what's currently escrowed — cannot drain active escrows.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="withdraw-token">
-                      Token Contract (C...)
-                    </Label>
+              <Card className="border-orange-500/30">
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2 text-base text-orange-600 dark:text-orange-400">
+                    <Scale className="h-4 w-4" /> Recover stuck funds
+                  </CardTitle>
+                  <CardDescription>
+                    Only the surplus above everything owed to escrows, earned
+                    fees and held yield can be taken. Active escrows can't be
+                    drained.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                     <Input
                       id="withdraw-token"
                       value={withdrawToken}
                       onChange={(e) => setWithdrawToken(e.target.value)}
-                      placeholder="C..."
+                      placeholder="Token (C…)"
                       className="font-mono"
                     />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="withdraw-to">Recipient (G...)</Label>
                     <Input
                       id="withdraw-to"
                       value={withdrawTo}
                       onChange={(e) => setWithdrawTo(e.target.value)}
-                      placeholder="G..."
+                      placeholder="Recipient (G…)"
                       className="font-mono"
                     />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="withdraw-amount">Amount (stroops)</Label>
                     <Input
                       id="withdraw-amount"
                       value={withdrawAmount}
                       onChange={(e) => setWithdrawAmount(e.target.value)}
-                      placeholder="10000000"
+                      placeholder="Amount in stroops"
                       className="font-mono"
                     />
                   </div>
-                </div>
-                <Button
-                  className="w-full gap-2"
-                  variant="destructive"
-                  disabled={
-                    isWithdrawing ||
-                    !withdrawToken.trim() ||
-                    !withdrawTo.trim() ||
-                    !withdrawAmount.trim()
-                  }
-                  onClick={handleWithdraw}
-                >
-                  {isWithdrawing ? (
-                    <>
+                  <Button
+                    className="w-full gap-2"
+                    variant="outline"
+                    disabled={
+                      isWithdrawing ||
+                      !withdrawToken.trim() ||
+                      !withdrawTo.trim() ||
+                      !withdrawAmount.trim()
+                    }
+                    onClick={handleWithdraw}
+                  >
+                    {isWithdrawing ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      Processing...
-                    </>
-                  ) : (
-                    <>
+                    ) : (
                       <Scale className="h-4 w-4" />
-                      Withdraw Excess
-                    </>
-                  )}
-                </Button>
-                <p className="text-xs text-muted-foreground">
-                  Amount is in base units (stroops). For 7-decimal tokens: 1.00
-                  XLM = 10,000,000 stroops.
-                </p>
-              </CardContent>
-            </Card>
-          </>
-        )}
-
-        {/* Arbiter Management — owner only */}
-        {isOwner && (
-          <ArbiterManagement
-            onArbiterAdded={() => fetchContractStats()}
-            onArbiterRemoved={() => fetchContractStats()}
-          />
-        )}
-
-        {/* Dispute Management — all admins */}
-        <Card className="border-orange-200 bg-orange-50/50 dark:bg-orange-900/10">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Shield className="h-5 w-5 text-orange-600" />
-              Dispute Management
-            </CardTitle>
-            <CardDescription>
-              View and resolve disputes on a dedicated page for better
-              performance
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button
-              onClick={() => navigate("/disputes")}
-              className="w-full bg-orange-600 hover:bg-orange-700"
-              size="lg"
-            >
-              Open Dispute Management Page
-            </Button>
-            <p className="text-xs text-muted-foreground mt-3 text-center">
-              Manage active disputes, review evidence, and communicate with
-              parties
-            </p>
-          </CardContent>
-        </Card>
+                    )}
+                    Withdraw surplus
+                  </Button>
+                  <p className="text-xs text-muted-foreground">
+                    1 XLM = 10,000,000 stroops.
+                  </p>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
+        </Tabs>
       </div>
 
       {/* Pause/Unpause confirmation dialog */}

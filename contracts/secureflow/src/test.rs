@@ -988,7 +988,7 @@ fn yield_supplies_idle_funds_and_pays_milestones_whole() {
 }
 
 #[test]
-fn yield_is_claimed_once_with_the_freelancer_share() {
+fn completed_job_tips_the_freelancer_and_the_platform_keeps_the_rest() {
     let t = setup();
     let pool = with_pool(&t);
     let id = t.direct(&[1_000_000]);
@@ -1006,12 +1006,19 @@ fn yield_is_claimed_once_with_the_freelancer_share() {
     let earned = t.sf.get_yield_info(&id).earned;
     assert!(earned > 190_000);
 
-    let (c0, f0) = (t.token.balance(&t.client), t.token.balance(&t.freelancer));
-    let (to_client, to_freelancer) = t.sf.claim_yield(&id);
-    assert_eq!(to_client + to_freelancer, earned);
-    assert_eq!(to_freelancer, earned * 2_000 / 10_000, "20% default share");
-    assert_eq!(t.token.balance(&t.client) - c0, to_client);
+    let token = Some(t.token.address.clone());
+    let (f0, c0) = (t.token.balance(&t.freelancer), t.token.balance(&t.client));
+    let fees0 = t.sf.get_withdrawable_fees(&token);
+    let (to_freelancer, to_platform) = t.sf.claim_yield(&id);
+    assert_eq!(to_freelancer + to_platform, earned);
+    assert_eq!(to_freelancer, earned * 6_000 / 10_000, "60% tip");
     assert_eq!(t.token.balance(&t.freelancer) - f0, to_freelancer);
+    assert_eq!(t.sf.get_withdrawable_fees(&token) - fees0, to_platform);
+    assert_eq!(
+        t.token.balance(&t.client),
+        c0,
+        "the client's principal was never yield"
+    );
     t.assert_solvent();
 
     // Exactly once.
@@ -1022,7 +1029,36 @@ fn yield_is_claimed_once_with_the_freelancer_share() {
 }
 
 #[test]
-fn cancelled_job_returns_principal_and_all_yield_to_the_client() {
+fn disputed_job_sends_all_its_yield_to_the_platform() {
+    let t = setup();
+    let pool = with_pool(&t);
+    let id = t.direct(&[1_000_000]);
+    t.sf.set_yield_opt_in(&id, &true, &t.client);
+    pool.set_b_rate(&1_210_000_000_000);
+
+    t.sf.start_work(&id, &t.freelancer);
+    t.sf.submit_milestone(&id, &0, &s(&t.env, "done"), &t.freelancer);
+    t.sf.dispute_milestone(&id, &0, &s(&t.env, "not what was asked"), &t.client);
+    // The arbiter awards the freelancer the full milestone.
+    t.sf.resolve_dispute(
+        &id,
+        &0,
+        &t.arbiter,
+        &1_000_000,
+        &0,
+        &s(&t.env, "work meets the brief"),
+    );
+    assert_eq!(t.sf.get_escrow(&id).unwrap().status, EscrowStatus::Released);
+
+    let f0 = t.token.balance(&t.freelancer);
+    let (to_freelancer, to_platform) = t.sf.claim_yield(&id);
+    assert_eq!(to_freelancer, 0, "no tip after a dispute");
+    assert!(to_platform > 0);
+    assert_eq!(t.token.balance(&t.freelancer), f0);
+    t.assert_solvent();
+}
+#[test]
+fn cancelled_job_returns_principal_whole_and_yield_to_the_platform() {
     let t = setup();
     let pool = with_pool(&t);
     let id = t.direct(&[1_000_000]);
@@ -1032,14 +1068,17 @@ fn cancelled_job_returns_principal_and_all_yield_to_the_client() {
 
     t.sf.cancel_job(&id, &t.client);
     t.assert_solvent();
-    let (to_client, to_freelancer) = t.sf.claim_yield(&id);
-    assert_eq!(to_freelancer, 0, "no work, no freelancer share");
-    assert!(to_client > 0);
-    // Budget and fee back (nobody applied, no penalty), plus the interest.
-    assert_eq!(t.token.balance(&t.client), start + 1_025_000 + to_client);
+    // Budget and fee back in full (nobody applied, no penalty).
+    assert_eq!(t.token.balance(&t.client), start + 1_025_000);
+    let (to_freelancer, to_platform) = t.sf.claim_yield(&id);
+    assert_eq!(to_freelancer, 0, "no work, no tip");
+    assert!(
+        to_platform > 0,
+        "a cancelled job's yield goes to the platform"
+    );
+    assert_eq!(t.token.balance(&t.client), start + 1_025_000);
     t.assert_solvent();
 }
-
 #[test]
 fn rounding_dust_comes_from_the_fee_never_the_principal() {
     let t = setup();

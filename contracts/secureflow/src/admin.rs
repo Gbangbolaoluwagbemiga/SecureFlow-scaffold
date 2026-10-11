@@ -409,6 +409,7 @@ pub fn delete_escrow(env: &Env, escrow_id: u32) -> SfResult<()> {
         DataKey::Applicants(escrow_id),
         DataKey::JobManager(escrow_id),
         DataKey::Arbitrated(escrow_id),
+        DataKey::EverDisputed(escrow_id),
         DataKey::OverdueRequest(escrow_id),
         DataKey::DisputeVoters(escrow_id),
         DataKey::Escrow(escrow_id),

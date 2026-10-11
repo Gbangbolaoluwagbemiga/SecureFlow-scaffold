@@ -4484,6 +4484,29 @@ export class ContractService {
     }
   }
 
+  /** The lending pool configured for native XLM, or null. */
+  async getYieldPool(): Promise<string | null> {
+    try {
+      const rv = await this.simulateReadonly("get_yield_pool", [
+        xdr.ScVal.scvVoid(),
+      ]);
+      const pool = scValToNative(rv) as string | null | undefined;
+      return pool ? String(pool) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Owner sets the freelancer's tip share of a successful job's yield. */
+  async setYieldFreelancerShare(bp: number, owner: string): Promise<string> {
+    if (!owner) throw new Error("Wallet not connected");
+    return this.sendOwnerTransaction(
+      "set_yield_freelancer_share",
+      [nativeToScVal(bp, { type: "u32" })],
+      owner,
+    );
+  }
+
   /** The client lets the escrow's unpaid funds earn, or brings them back. */
   async setYieldOptIn(
     escrowId: number,

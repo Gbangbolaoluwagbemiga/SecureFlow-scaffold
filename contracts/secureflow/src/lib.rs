@@ -119,8 +119,8 @@ impl SecureFlow {
         idle_yield::get_pool(&env, token)
     }
 
-    /// Owner sets the freelancer's share of a completed job's yield, in basis
-    /// points (default 2000 = 20%).
+    /// Owner sets the freelancer's tip share of a successful job's yield, in
+    /// basis points (default 6000 = 60%; the platform keeps the rest).
     pub fn set_yield_freelancer_share(env: Env, bp: u32) -> Result<(), Error> {
         Ok(idle_yield::set_freelancer_share(&env, bp)?)
     }
@@ -143,8 +143,9 @@ impl SecureFlow {
         Ok(idle_yield::invest_idle(&env, escrow_id)?)
     }
 
-    /// Pay out a finished escrow's yield: the freelancer's share on a
-    /// completed job, the rest to the client. Returns (client, freelancer).
+    /// Distribute a finished escrow's yield: a job completed without dispute
+    /// tips its freelancer and the platform keeps the rest; otherwise all of it
+    /// goes to the platform. Returns (freelancer, platform).
     pub fn claim_yield(env: Env, escrow_id: u32) -> Result<(i128, i128), Error> {
         Ok(idle_yield::claim(&env, escrow_id)?)
     }

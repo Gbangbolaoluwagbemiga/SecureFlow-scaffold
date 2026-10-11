@@ -144,6 +144,7 @@ pub fn raise_overdue_dispute(
     }
 
     escrow.status = EscrowStatus::Disputed;
+    core::p_set(env, &DataKey::EverDisputed(escrow_id), &true);
     core::save_escrow(env, escrow_id, &escrow);
     core::p_remove(
         env,

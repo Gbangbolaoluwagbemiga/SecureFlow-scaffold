@@ -472,6 +472,6 @@ pub struct YieldReleased {
 pub struct YieldClaimed {
     #[topic]
     pub escrow_id: u32,
-    pub to_client: i128,
     pub to_freelancer: i128,
+    pub to_platform: i128,
 }

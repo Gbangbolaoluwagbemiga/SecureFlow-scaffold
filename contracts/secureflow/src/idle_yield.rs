@@ -22,8 +22,10 @@
 //!   Never from another escrow's money.
 //! - Interest is held for the escrow and counted as owed, so the owner's
 //!   surplus sweep can never take it. When the escrow is finished, `claim`
-//!   pays it out: a freelancer share on a completed job, the rest to the
-//!   client, all of it to the client otherwise.
+//!   distributes it: a job completed without dispute tips its freelancer
+//!   (60% by default) and the platform keeps the rest; any other ending
+//!   (dispute, cancellation, refund, expiry) sends all of it to the platform.
+//!   The client's principal is never touched by any of this.
 //!
 //! Re-investing after a payout is not automatic: `invest_idle` is public, and
 //! a keeper (the Autopilot service) calls it for opted-in escrows. Anyone
@@ -177,8 +179,15 @@ pub fn invest_idle(env: &Env, escrow_id: u32) -> SfResult<i128> {
     invest(env, escrow_id, &escrow)
 }
 
-/// Pay out an escrow's yield once it is finished. Anyone may trigger it; the
-/// money only goes to the escrow's own client and freelancer.
+/// Distribute an escrow's yield once it is finished. Anyone may trigger it.
+///
+/// A job completed without dispute tips its freelancer (60% by default) and
+/// the platform keeps the rest. A job that was disputed, cancelled, refunded
+/// or expired earned no tip: all of its yield goes to the platform. The
+/// client's principal is never part of this; it was returned or paid out
+/// before the escrow could finish.
+///
+/// Returns (to freelancer, to platform).
 pub fn claim(env: &Env, escrow_id: u32) -> SfResult<(i128, i128)> {
     let mut escrow = core::load_escrow(env, escrow_id)?;
     if !core::is_terminal(&escrow.status) {
@@ -190,28 +199,33 @@ pub fn claim(env: &Env, escrow_id: u32) -> SfResult<(i128, i128)> {
     if total <= 0 {
         return Err(SecureFlowError::YieldNothingToClaim);
     }
-    let to_freelancer = match (&escrow.status, &escrow.beneficiary) {
-        (EscrowStatus::Released, Some(_)) => {
-            mul_div(total, i128::from(freelancer_share(env)), BP_DENOMINATOR)?
-        }
-        _ => 0,
+    let disputed = core::p_get(env, &DataKey::EverDisputed(escrow_id)).unwrap_or(false);
+    let tipped = match (&escrow.status, &escrow.beneficiary) {
+        (EscrowStatus::Released, Some(freelancer)) if !disputed => Some(freelancer.clone()),
+        _ => None,
     };
-    let to_client = sub(total, to_freelancer)?;
+    let to_freelancer = match tipped {
+        Some(_) => mul_div(total, i128::from(freelancer_share(env)), BP_DENOMINATOR)?,
+        None => 0,
+    };
+    let to_platform = sub(total, to_freelancer)?;
 
     set_earned(env, escrow_id, 0);
     core::liabilities_sub(env, escrow.token.as_ref(), total)?;
-    core::pay_out(env, escrow.token.as_ref(), &escrow.depositor, to_client)?;
-    if let Some(beneficiary) = &escrow.beneficiary {
-        core::pay_out(env, escrow.token.as_ref(), beneficiary, to_freelancer)?;
+    if let Some(freelancer) = &tipped {
+        core::pay_out(env, escrow.token.as_ref(), freelancer, to_freelancer)?;
     }
+    // The platform's share joins its earned fees: withdrawable by the fee
+    // collector, and part of the cover for the pool's rounding.
+    core::fees_credit(env, escrow.token.as_ref(), to_platform)?;
 
     events::YieldClaimed {
         escrow_id,
-        to_client,
         to_freelancer,
+        to_platform,
     }
     .publish(env);
-    Ok((to_client, to_freelancer))
+    Ok((to_freelancer, to_platform))
 }
 
 // ─── Moving money ────────────────────────────────────────────────────────────

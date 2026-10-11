@@ -43,9 +43,10 @@ pub const OVERDUE_RESOLUTION_INDEX: u32 = u32::MAX;
 
 pub const CONTRACT_VERSION: &str = "2.3.0-yield";
 
-/// Default share of an escrow's yield paid to the freelancer on a completed
-/// job (20%). The client funded the capital, so they keep the rest.
-pub const DEFAULT_YIELD_FREELANCER_SHARE_BP: u32 = 2_000;
+/// Share of an escrow's yield paid to the freelancer as a tip for a job
+/// completed without dispute (60%). The platform takes the rest, and all of
+/// it when the job was disputed or never completed.
+pub const DEFAULT_YIELD_FREELANCER_SHARE_BP: u32 = 6_000;
 
 /// Real cash that must stand behind the pool's rounding. The pool rounds each
 /// deposit and withdrawal down by a stroop or two; that dust is paid from the
@@ -561,8 +562,7 @@ pub enum DataKey {
     TotalFeesByToken(Address),
     /// token -> Blend pool idle escrow funds may be supplied to.
     YieldPool(Address),
-    /// Share of an escrow's yield paid to the freelancer on a completed job,
-    /// in basis points.
+    /// Freelancer's tip share of a successful job's yield, in basis points.
     YieldFreelancerShareBp,
 
     // ── Persistent: per escrow ──
@@ -588,6 +588,9 @@ pub enum DataKey {
     YieldPosition(u32),
     /// Yield earned by this escrow and not yet paid out.
     YieldEarned(u32),
+    /// The escrow has been in dispute at least once (milestone or overdue).
+    /// Its yield then goes to the platform, not the freelancer.
+    EverDisputed(u32),
     /// (escrow, milestone, `freelancer_amount`, `client_amount`) -> voters.
     /// Keyed by the split, so quorum means N arbiters agreeing on one outcome
     /// rather than N arbiters turning up.

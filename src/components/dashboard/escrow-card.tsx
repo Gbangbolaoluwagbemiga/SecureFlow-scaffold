@@ -327,6 +327,9 @@ export function EscrowCard({
                     status={escrow.status}
                     isClient={escrow.isClient || false}
                     isFreelancer={escrow.isFreelancer || false}
+                    hadDispute={escrow.milestones.some(
+                      (m) => m.status === "disputed" || m.status === "resolved",
+                    )}
                   />
                 )}
                 <div className="space-y-3">
